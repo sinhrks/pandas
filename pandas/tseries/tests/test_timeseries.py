@@ -2854,6 +2854,83 @@ class TestDatetimeIndex(tm.TestCase):
                             name='TEST')
         self.assertEqual(idx.name, 'TEST')
 
+    def test_constructor_list_numpy_compat(self):
+
+        exp = pd.DatetimeIndex([pd.NaT, pd.Timestamp('2011-01-02')], name='idx')
+
+        # int
+        values = [pd.tslib.iNaT, pd.Timestamp('2011-01-02').value]
+        result1 = DatetimeIndex(values, name='idx')
+        result2 = DatetimeIndex(np.array(values), name='idx')
+        tm.assert_index_equal(exp, result1)
+        tm.assert_index_equal(exp, result2)
+
+        # incorrect freq
+        msg = "Inferred frequency None from passed dates does not conform to passed frequency D"
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DatetimeIndex(values, name='idx', freq='D')
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DatetimeIndex(np.array(values), name='idx', freq='D')
+
+        # string
+        values = ['NaT', '2011-01-02']
+        result1 = DatetimeIndex(values, name='idx')
+        result2 = DatetimeIndex(np.array(values), name='idx')
+        tm.assert_index_equal(exp, result1)
+        tm.assert_index_equal(exp, result2)
+
+        # incorrect freq
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DatetimeIndex(values, name='idx', freq='D')
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DatetimeIndex(np.array(values), name='idx', freq='D')
+
+        exp = pd.DatetimeIndex([pd.Timestamp('2011-01-01'), pd.Timestamp('2011-01-02')],
+                               name='idx', freq='D')
+
+        # int with freq
+        values = [pd.Timestamp('2011-01-01').value, pd.Timestamp('2011-01-02').value]
+        result1 = DatetimeIndex(values, name='idx', freq='D')
+        result2 = DatetimeIndex(np.array(values), name='idx', freq='D')
+        tm.assert_index_equal(exp, result1)
+        self.assertEqual(exp.freq, result1.freq)
+        tm.assert_index_equal(exp, result2)
+        self.assertEqual(exp.freq, result2.freq)
+
+        # string with freq
+        values = ['2011-01-01', '2011-01-02']
+        result1 = DatetimeIndex(values, name='idx', freq='D')
+        result2 = DatetimeIndex(np.array(values), name='idx', freq='D')
+        tm.assert_index_equal(exp, result1)
+        self.assertEqual(exp.freq, result1.freq)
+        tm.assert_index_equal(exp, result2)
+        self.assertEqual(exp.freq, result2.freq)
+
+        # with tz
+        for tz in ['Asia/Tokyo', 'US/Eastern']:
+            exp = pd.DatetimeIndex([pd.Timestamp('2011-01-01 10:00'),
+                                    pd.Timestamp('2011-01-02 10:00')],
+                                   name='idx', tz=tz)
+
+            # int with freq
+            values = [pd.Timestamp('2011-01-01 10:00').value,
+                      pd.Timestamp('2011-01-02 10:00').value]
+            result1 = DatetimeIndex(values, name='idx', tz=tz)
+            result2 = DatetimeIndex(np.array(values), name='idx', tz=tz)
+            tm.assert_index_equal(exp, result1)
+            self.assertEqual(exp.tz, result1.tz)
+            tm.assert_index_equal(exp, result2)
+            self.assertEqual(exp.tz, result2.tz)
+
+            # string with freq
+            values = ['2011-01-01 10:00', '2011-01-02 10:00']
+            result1 = DatetimeIndex(values, name='idx', tz=tz)
+            result2 = DatetimeIndex(np.array(values), name='idx', tz=tz)
+            tm.assert_index_equal(exp, result1)
+            self.assertEqual(exp.tz, result1.tz)
+            tm.assert_index_equal(exp, result2)
+            self.assertEqual(exp.tz, result2.tz)
+
     def test_comparisons_coverage(self):
         rng = date_range('1/1/2000', periods=10)
 
