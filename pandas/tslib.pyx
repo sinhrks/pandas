@@ -980,6 +980,7 @@ cdef str _NDIM_STRING = "ndim"
 # construction requirements, we need to do object instantiation in python
 # (see Timestamp class above). This will serve as a C extension type that
 # shadows the python class, where we do any heavy lifting.
+
 cdef class _Timestamp(datetime):
 
     cdef readonly:
@@ -992,6 +993,7 @@ cdef class _Timestamp(datetime):
         return datetime.__hash__(self)
 
     def __richcmp__(_Timestamp self, object other, int op):
+
         cdef:
             _Timestamp ots
             int ndim
@@ -1000,6 +1002,7 @@ cdef class _Timestamp(datetime):
             if isinstance(other, _NaT):
                 return _cmp_nat_dt(other, self, _reverse_ops[op])
             ots = other
+
         elif isinstance(other, datetime):
             if self.nanosecond == 0:
                 val = self.to_pydatetime()
@@ -1009,34 +1012,40 @@ cdef class _Timestamp(datetime):
                 ots = Timestamp(other)
             except ValueError:
                 return self._compare_outside_nanorange(other, op)
-        else:
-            ndim = getattr(other, _NDIM_STRING, -1)
 
-            if ndim != -1:
-                if ndim == 0:
-                    if isinstance(other, np.datetime64):
-                        other = Timestamp(other)
-                    else:
-                        if op == Py_EQ:
-                            return False
-                        elif op == Py_NE:
-                            return True
+        elif isinstance(other, np.datetime64):
+            ots = Timestamp(other)
 
-                        # only allow ==, != ops
-                        raise TypeError('Cannot compare type %r with type %r' %
-                                        (type(self).__name__,
-                                         type(other).__name__))
+        elif getattr(other, _NDIM_STRING, -1) >= 1:
+
+            if isinstance(other, np.ndarray):
+                if other.dtype == np.object:
+                    # other may be a Series/DataFrame
+                    return self._compare_object_array(other, op)
                 return PyObject_RichCompare(other, self, _reverse_ops[op])
             else:
-                if op == Py_EQ:
-                    return False
-                elif op == Py_NE:
-                    return True
-                raise TypeError('Cannot compare type %r with type %r' %
-                                (type(self).__name__, type(other).__name__))
+                return NotImplemented
+        else:
+            if op == Py_EQ:
+                return False
+            elif op == Py_NE:
+                return True
+            raise TypeError('Cannot compare type %r with type %r' %
+                            (type(self).__name__, type(other).__name__))
 
-        self._assert_tzawareness_compat(other)
+        self._assert_tzawareness_compat(ots)
         return _cmp_scalar(self.value, ots.value, op)
+
+    def _compare_object_array(self, ndarray[object] other, int op):
+
+        cdef:
+            Py_ssize_t i
+            ndarray[int8_t, ndim=1] result
+
+        result = np.empty(len(other), dtype=np.int8)
+        for i in range(len(other)):
+            result[i] = PyObject_RichCompareBool(self, other[i], op)
+        return result.view(dtype=np.bool)
 
     def __repr__(self):
         stamp = self._repr_base

@@ -1193,7 +1193,7 @@ def map_infer_mask(ndarray arr, object f, ndarray[uint8_t] mask,
     return result
 
 
-def map_infer(ndarray arr, object f, bint convert=1):
+cpdef map_infer(ndarray arr, object f, bint convert=1):
     """
     Substitute for np.vectorize with pandas-friendly dtype inference
 

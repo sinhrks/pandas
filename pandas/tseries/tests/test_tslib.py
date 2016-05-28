@@ -1290,6 +1290,293 @@ class TestTimestampNsOperations(tm.TestCase):
             self.assert_index_equal(left - right, exp)
             self.assert_index_equal(right - left, exp)
 
+    def test_comparison_scalar(self):
+
+        ts = pd.Timestamp('2011-01-01 10:00')
+
+        for other in [datetime.datetime(2011, 1, 1, 10),
+                      np.datetime64('2011-01-01 10:00Z')]:
+            self.assertTrue(ts == other)
+            self.assertFalse(ts != other)
+            self.assertFalse(ts < other)
+            self.assertFalse(ts > other)
+            self.assertTrue(ts <= other)
+            self.assertTrue(ts >= other)
+
+            self.assertTrue(other == ts)
+            self.assertFalse(other != ts)
+            self.assertFalse(other < ts)
+            self.assertFalse(other > ts)
+            self.assertTrue(other <= ts)
+            self.assertTrue(other >= ts)
+
+        for other in [datetime.datetime(2011, 1, 1, 11),
+                      np.datetime64('2011-01-01 11:00Z')]:
+            self.assertFalse(ts == other)
+            self.assertTrue(ts != other)
+            self.assertTrue(ts < other)
+            self.assertFalse(ts > other)
+            self.assertTrue(ts <= other)
+            self.assertFalse(ts >= other)
+
+            self.assertFalse(other == ts)
+            self.assertTrue(other != ts)
+            self.assertFalse(other < ts)
+            self.assertTrue(other > ts)
+            self.assertFalse(other <= ts)
+            self.assertTrue(other >= ts)
+
+        for tz in [None, 'US/Eastern', 'Asia/Tokyo']:
+            ts1 = pd.Timestamp('2013-01-01', tz=tz)
+            ts2 = pd.Timestamp('2014-01-01', tz=tz)
+
+            for l, r in [(ts1, ts2), (ts2, ts1)]:
+                self.assertTrue(l == l)
+                self.assertFalse(l != l)
+
+                self.assertFalse(l == r)
+                self.assertTrue(l != r)
+
+            self.assertTrue(ts1 < ts2)
+            self.assertFalse(ts1 > ts2)
+            self.assertTrue(ts1 <= ts2)
+            self.assertFalse(ts1 >= ts2)
+
+            self.assertFalse(ts2 < ts1)
+            self.assertTrue(ts2 > ts1)
+            self.assertFalse(ts2 <= ts1)
+            self.assertTrue(ts2 >= ts1)
+
+    def test_comparison_scalar_tz(self):
+        for tz in ['UTC', 'US/Eastern', 'Asia/Tokyo']:
+            ts = pd.Timestamp('2014-01-01', tz=tz)
+
+            # msg can differ in datetime/datetime comparison path
+            msg = ("(Cannot compare tz-naive and tz-aware timestamps|"
+                   "can't compare offset-naive and offset-aware datetimes)")
+
+            for other in [pd.Timestamp('2013-01-01 10:00'),
+                          datetime.datetime(2013, 1, 1, 10),
+                          np.datetime64('2013-01-01 10:00Z')]:
+
+                for l, r in [(ts, other), (other, ts)]:
+
+                    if isinstance(l, np.datetime64):
+                        # if np.datetime64 is lhs and datetime is rhs,
+                        # TypeError is not raised
+                        self.assertFalse(l ==r)
+                        self.assertTrue(l != r)
+                    else:
+                        with tm.assertRaisesRegexp(TypeError, msg):
+                            l == r
+
+                        with tm.assertRaisesRegexp(TypeError, msg):
+                            l != r
+
+                    with tm.assertRaisesRegexp(TypeError, msg):
+                        l > r
+
+                    with tm.assertRaisesRegexp(TypeError, msg):
+                        l < r
+
+                    with tm.assertRaisesRegexp(TypeError, msg):
+                        l >= r
+
+                    with tm.assertRaisesRegexp(TypeError, msg):
+                        l <= r
+
+    def test_comparison_array(self):
+        ts = pd.Timestamp('2011-01-01 10:00')
+
+        for data in [[pd.Timestamp('2011-01-01 09:00'),
+                      pd.Timestamp('2011-01-01 10:00'),
+                      pd.Timestamp('2011-01-01 11:00')],
+                     [datetime.datetime(2011, 1, 1, 9),
+                      datetime.datetime(2011, 1, 1, 10),
+                      datetime.datetime(2011, 1, 1, 11)],
+                     [np.datetime64('2011-01-01 09:00Z'),
+                      np.datetime64('2011-01-01 10:00Z'),
+                      np.datetime64('2011-01-01 11:00Z')]]:
+
+            other = np.array(data, dtype=object)
+            self.assert_numpy_array_equal(ts == other,
+                                          np.array([False, True, False]))
+            self.assert_numpy_array_equal(ts != other,
+                                          np.array([True, False, True]))
+            self.assert_numpy_array_equal(ts < other,
+                                          np.array([False, False, True]))
+            self.assert_numpy_array_equal(ts > other,
+                                          np.array([True, False, False]))
+            self.assert_numpy_array_equal(ts <= other,
+                                          np.array([False, True, True]))
+            self.assert_numpy_array_equal(ts >= other,
+                                          np.array([True, True, False]))
+
+            self.assert_numpy_array_equal(other == ts,
+                                          np.array([False, True, False]))
+            self.assert_numpy_array_equal(other != ts,
+                                          np.array([True, False, True]))
+            self.assert_numpy_array_equal(other < ts,
+                                          np.array([True, False, False]))
+            self.assert_numpy_array_equal(other > ts,
+                                          np.array([False, False, True]))
+            self.assert_numpy_array_equal(other <= ts,
+                                          np.array([True, True, False]))
+            self.assert_numpy_array_equal(other >= ts,
+                                          np.array([False, True, True]))
+
+        for tz in [None, 'US/Eastern', 'Asia/Tokyo']:
+
+            ts = pd.Timestamp('2011-01-01 10:00', tz=tz)
+
+            other = np.array([pd.Timestamp('2011-01-01 09:00', tz=tz),
+                              pd.Timestamp('2011-01-01 10:00', tz=tz),
+                              pd.Timestamp('2011-01-01 11:00', tz=tz)])
+
+            self.assert_numpy_array_equal(ts == other,
+                                          np.array([False, True, False]))
+            self.assert_numpy_array_equal(ts != other,
+                                          np.array([True, False, True]))
+            self.assert_numpy_array_equal(ts < other,
+                                          np.array([False, False, True]))
+            self.assert_numpy_array_equal(ts > other,
+                                          np.array([True, False, False]))
+            self.assert_numpy_array_equal(ts <= other,
+                                          np.array([False, True, True]))
+            self.assert_numpy_array_equal(ts >= other,
+                                          np.array([True, True, False]))
+
+            self.assert_numpy_array_equal(other == ts,
+                                          np.array([False, True, False]))
+            self.assert_numpy_array_equal(other != ts,
+                                          np.array([True, False, True]))
+            self.assert_numpy_array_equal(other < ts,
+                                          np.array([True, False, False]))
+            self.assert_numpy_array_equal(other > ts,
+                                          np.array([False, False, True]))
+            self.assert_numpy_array_equal(other <= ts,
+                                          np.array([True, True, False]))
+            self.assert_numpy_array_equal(other >= ts,
+                                          np.array([False, True, True]))
+
+        # datetime64 dtype
+        ts = pd.Timestamp('2011-01-01 10:00')
+        other = np.array([np.datetime64('2011-01-01 09:00Z'),
+                          np.datetime64('2011-01-01 10:00Z'),
+                          np.datetime64('2011-01-01 11:00Z')])
+
+        self.assert_numpy_array_equal(ts == other,
+                                      np.array([False, True, False]))
+        self.assert_numpy_array_equal(ts != other,
+                                      np.array([True, False, True]))
+        self.assert_numpy_array_equal(ts < other,
+                                      np.array([False, False, True]))
+        self.assert_numpy_array_equal(ts > other,
+                                      np.array([True, False, False]))
+        self.assert_numpy_array_equal(ts <= other,
+                                      np.array([False, True, True]))
+        self.assert_numpy_array_equal(ts >= other,
+                                      np.array([True, True, False]))
+
+        self.assert_numpy_array_equal(other == ts,
+                                      np.array([False, True, False]))
+        self.assert_numpy_array_equal(other != ts,
+                                      np.array([True, False, True]))
+        self.assert_numpy_array_equal(other < ts,
+                                      np.array([True, False, False]))
+        self.assert_numpy_array_equal(other > ts,
+                                      np.array([False, False, True]))
+        self.assert_numpy_array_equal(other <= ts,
+                                      np.array([True, True, False]))
+        self.assert_numpy_array_equal(other >= ts,
+                                      np.array([False, True, True]))
+
+        # other dtype
+        ts = pd.Timestamp('2011-01-01 10:00')
+        self.assert_numpy_array_equal(ts == np.array([1, 2, 3]),
+                                      np.array([False, False, False]))
+        self.assert_numpy_array_equal(ts != np.array([1, 2, 3]),
+                                      np.array([True, True, True]))
+        self.assert_numpy_array_equal(np.array([1, 2, 3]) == ts,
+                                      np.array([False, False, False]))
+        self.assert_numpy_array_equal(np.array([1, 2, 3]) != ts,
+                                      np.array([True, True, True]))
+
+        msg = "Cannot compare type 'Timestamp' with type 'int'"
+        with tm.assertRaisesRegexp(TypeError, msg):
+            ts >= np.array([1, 2, 3])
+        with tm.assertRaisesRegexp(TypeError, msg):
+            np.array([1, 2, 3]) >= ts
+
+    def test_comparison_others(self):
+        ts = pd.Timestamp('2013-01-01')
+        other = pd.DatetimeIndex(['2013-01-01', '2013-01-02'])
+        tm.assert_numpy_array_equal(ts == other, np.array([True, False]))
+        tm.assert_numpy_array_equal(ts != other, np.array([False, True]))
+        tm.assert_numpy_array_equal(ts < other, np.array([False, True]))
+        tm.assert_numpy_array_equal(other == ts, np.array([True, False]))
+        tm.assert_numpy_array_equal(other != ts, np.array([False, True]))
+        tm.assert_numpy_array_equal(other < ts, np.array([False, False]))
+
+        other = other.asobject
+        tm.assert_numpy_array_equal(ts == other, np.array([True, False]))
+        tm.assert_numpy_array_equal(ts != other, np.array([False, True]))
+        tm.assert_numpy_array_equal(ts < other, np.array([False, True]))
+        tm.assert_numpy_array_equal(other == ts, np.array([True, False]))
+        tm.assert_numpy_array_equal(other != ts, np.array([False, True]))
+        tm.assert_numpy_array_equal(other < ts, np.array([False, False]))
+
+        other = pd.Series([pd.Timestamp('2013-01-01'),
+                           pd.Timestamp('2013-01-02')])
+        tm.assert_series_equal(ts == other, Series([True, False]))
+        tm.assert_series_equal(ts != other, Series([False, True]))
+        tm.assert_series_equal(ts < other, Series([False, True]))
+        tm.assert_series_equal(other == ts, Series([True, False]))
+        tm.assert_series_equal(other != ts, Series([False, True]))
+        tm.assert_series_equal(other < ts, Series([False, False]))
+
+        other = pd.DataFrame([pd.Timestamp('2013-01-01'),
+                              pd.Timestamp('2013-01-02')])
+        tm.assert_frame_equal(ts == other, pd.DataFrame([True, False]))
+        tm.assert_frame_equal(ts != other, pd.DataFrame([False, True]))
+        tm.assert_frame_equal(ts < other, pd.DataFrame([False, True]))
+        tm.assert_frame_equal(other == ts, pd.DataFrame([True, False]))
+        tm.assert_frame_equal(other != ts, pd.DataFrame([False, True]))
+        tm.assert_frame_equal(other < ts, pd.DataFrame([False, False]))
+
+    def test_comparison_array_tz(self):
+        ts = pd.Timestamp('2013-01-01')
+
+        for klass in [np.array, pd.Index, pd.Series, pd.DataFrame]:
+            data = np.array([pd.Timestamp('2015-01-01'),
+                             pd.Timestamp('2014-01-01', tz='US/Eastern')],
+                            dtype=object)
+            other = klass(data, dtype=object)
+            print(other)
+
+            for l, r in [# (ts, other),
+            (other, ts)]:
+                msg = "Cannot compare tz-naive and tz-aware timestamps"
+
+                print(type(l), type(r))
+                # with tm.assertRaisesRegexp(TypeError, msg):
+                #     l == r
+
+                # with tm.assertRaisesRegexp(TypeError, msg):
+                #     l != r
+
+                with tm.assertRaisesRegexp(TypeError, msg):
+                    l > r
+
+                with tm.assertRaisesRegexp(TypeError, msg):
+                    l < r
+
+                with tm.assertRaisesRegexp(TypeError, msg):
+                    l >= r
+
+                with tm.assertRaisesRegexp(TypeError, msg):
+                    l <= r
+
 
 class TestTslib(tm.TestCase):
     def test_intraday_conversion_factors(self):
