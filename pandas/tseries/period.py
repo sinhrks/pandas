@@ -463,6 +463,10 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
         values = self.values
         return ((values[1:] - values[:-1]) < 2).all()
 
+    @cache_readonly
+    def _freqn(self):
+        return frequencies.get_freq_group(self.freq)
+
     def asfreq(self, freq=None, how='E'):
         """
         Convert the PeriodIndex to the specified frequency `freq`.
@@ -708,28 +712,19 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
                                   series, key)
         except (KeyError, IndexError):
             try:
-                asdt, parsed, reso = parse_time_string(key, self.freq)
+                key, parsed, reso = parse_time_string(key, self.freq)
                 grp = frequencies.Resolution.get_freq_group(reso)
-                freqn = frequencies.get_freq_group(self.freq)
-
-                vals = self.values
-
                 # if our data is higher resolution than requested key, slice
-                if grp < freqn:
-                    iv = Period(asdt, freq=(grp, 1))
-                    ord1 = iv.asfreq(self.freq, how='S').ordinal
-                    ord2 = iv.asfreq(self.freq, how='E').ordinal
-
-                    if ord2 < vals[0] or ord1 > vals[-1]:
-                        raise KeyError(key)
-
-                    pos = np.searchsorted(self.values, [ord1, ord2])
-                    key = slice(pos[0], pos[1] + 1)
-                    return series[key]
-                elif grp == freqn:
-                    key = Period(asdt, freq=self.freq).ordinal
-                    return com._maybe_box(self, self._engine.get_value(s, key),
-                                          series, key)
+                if grp < self._freqn:
+                    try:
+                        key = self._get_period_slice(parsed, reso)
+                        return series[key]
+                    except KeyError:
+                        # raise
+                        # ToDo: FIXME
+                        return series[0:0]
+                elif grp == self._freqn:
+                    pass
                 else:
                     raise KeyError(key)
             except TypeError:
@@ -753,25 +748,34 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
         -------
         loc : int
         """
+
         try:
             return self._engine.get_loc(key)
         except KeyError:
             if is_integer(key):
                 raise
 
+        if not isinstance(key, compat.string_types):
             try:
-                asdt, parsed, reso = parse_time_string(key, self.freq)
-                key = asdt
-            except TypeError:
-                pass
-
-            try:
-                key = Period(key, freq=self.freq)
-            except ValueError:
-                # we cannot construct the Period
-                # as we have an invalid type
+                p = Period(key, freq=self.freq)
+                ordinal = tslib.iNaT if p is tslib.NaT else p.ordinal
+                return Index.get_loc(self, ordinal, method, tolerance)
+            except (TypeError, KeyError, ValueError):
                 raise KeyError(key)
 
+        else:
+            try:
+                _, parsed, reso = parse_time_string(key, self.freq)
+                grp = frequencies.Resolution.get_freq_group(reso)
+                if grp == self._freqn:
+                    p = Period(key, freq=self.freq)
+                    return Index.get_loc(self, p.ordinal, method, tolerance)
+
+                elif grp < self._freqn:
+                    return self._get_period_slice(parsed, reso)
+
+            except (TypeError, KeyError):
+                pass
             try:
                 ordinal = tslib.iNaT if key is tslib.NaT else key.ordinal
                 if tolerance is not None:
@@ -843,20 +847,29 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
         return (t1.asfreq(self.freq, how='start'),
                 t1.asfreq(self.freq, how='end'))
 
+
     def _get_string_slice(self, key):
-        if not self.is_monotonic:
-            raise ValueError('Partial indexing only valid for '
-                             'ordered time series')
-
         key, parsed, reso = parse_time_string(key, self.freq)
-        grp = frequencies.Resolution.get_freq_group(reso)
-        freqn = frequencies.get_freq_group(self.freq)
-        if reso in ['day', 'hour', 'minute', 'second'] and not grp < freqn:
-            raise KeyError(key)
+        return self._get_period_slice(parsed, reso)
 
-        t1, t2 = self._parsed_string_to_bounds(reso, parsed)
-        return slice(self.searchsorted(t1.ordinal, side='left'),
-                     self.searchsorted(t2.ordinal, side='right'))
+    def _get_period_slice(self, key, reso):
+        grp = frequencies.Resolution.get_freq_group(reso)
+        # if grp >= self._freqn:
+        #     raise KeyError(key)
+
+        t1, t2 = self._parsed_string_to_bounds(reso, key)
+        vals = self.asi8
+
+        if self.is_monotonic_increasing:
+            if t2.ordinal < vals[0] or t1.ordinal > vals[-1]:
+                raise KeyError(key)
+            return slice(self.searchsorted(t1.ordinal, side='left'),
+                         self.searchsorted(t2.ordinal, side='right'))
+        else:
+            if t2.ordinal < vals.min() or t1.ordinal > vals.max():
+                raise KeyError(key)
+            indexer = np.where((t1.ordinal <= vals) & (vals <= t2.ordinal))
+            return indexer[0]
 
     def _convert_tolerance(self, tolerance):
         tolerance = DatetimeIndexOpsMixin._convert_tolerance(self, tolerance)

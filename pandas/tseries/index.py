@@ -1347,7 +1347,6 @@ class DatetimeIndex(DatelikeOps, TimelikeOps, DatetimeIndexOpsMixin,
         Fast lookup of value from 1-dimensional ndarray. Only use this if you
         know what you're doing
         """
-
         if isinstance(key, datetime):
 
             # needed to localize naive datetimes
@@ -1489,32 +1488,8 @@ class DatetimeIndex(DatelikeOps, TimelikeOps, DatetimeIndexOpsMixin,
         if isinstance(start, time) or isinstance(end, time):
             raise KeyError('Cannot mix time and non-time slice keys')
 
-        try:
-            return Index.slice_indexer(self, start, end, step, kind=kind)
-        except KeyError:
-            # For historical reasons DatetimeIndex by default supports
-            # value-based partial (aka string) slices on non-monotonic arrays,
-            # let's try that.
-            if ((start is None or isinstance(start, compat.string_types)) and
-                    (end is None or isinstance(end, compat.string_types))):
-                mask = True
-                if start is not None:
-                    start_casted = self._maybe_cast_slice_bound(
-                        start, 'left', kind)
-                    mask = start_casted <= self
-
-                if end is not None:
-                    end_casted = self._maybe_cast_slice_bound(
-                        end, 'right', kind)
-                    mask = (self <= end_casted) & mask
-
-                indexer = mask.nonzero()[0][::step]
-                if len(indexer) == len(self):
-                    return slice(None)
-                else:
-                    return indexer
-            else:
-                raise
+        return super(DatetimeIndex, self).slice_indexer(start, end, step,
+                                                        kind=kind)
 
     # alias to offset
     def _get_freq(self):

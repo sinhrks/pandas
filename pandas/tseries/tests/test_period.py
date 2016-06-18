@@ -2120,35 +2120,176 @@ class TestPeriodIndex(tm.TestCase):
         rng = period_range('2007-01', periods=50, freq='M')
         ts = Series(np.random.randn(len(rng)), rng)
 
-        self.assertRaises(KeyError, ts.__getitem__, '2006')
+        exp = Series([], index=PeriodIndex([], freq='M'))
+        tm.assert_series_equal(ts['2006'], exp)
 
         result = ts['2008']
         self.assertTrue((result.index.year == 2008).all())
+        tm.assert_series_equal(result, ts.iloc[12:24])
 
         result = ts['2008':'2009']
         self.assertEqual(len(result), 24)
+        tm.assert_series_equal(result, ts.iloc[12:36])
 
         result = ts['2008-1':'2009-12']
         self.assertEqual(len(result), 24)
+        tm.assert_series_equal(result, ts.iloc[12:36])
 
         result = ts['2008Q1':'2009Q4']
         self.assertEqual(len(result), 24)
+        tm.assert_series_equal(result, ts.iloc[12:36])
 
         result = ts[:'2009']
         self.assertEqual(len(result), 36)
+        tm.assert_series_equal(result, ts.iloc[:36])
 
         result = ts['2009':]
         self.assertEqual(len(result), 50 - 24)
+        tm.assert_series_equal(result, ts.iloc[24:])
 
         exp = result
         result = ts[24:]
         tm.assert_series_equal(exp, result)
 
-        ts = ts[10:].append(ts[10:])
-        self.assertRaisesRegexp(KeyError,
-                                "left slice bound for non-unique "
-                                "label: '2008'",
-                                ts.__getitem__, slice('2008', '2009'))
+        dup = ts[10:].append(ts[10:])
+        res = dup['2008':'2009']
+        tm.assert_series_equal(res, ts[12:36].append(ts[12:36]))
+
+    def test_getitem_loc_partial_non_monotonic(self):
+        # check compat with DatetimeIndex
+        pidx = PeriodIndex(['2011-01-01', '2011-01-03', '2011-01-02',
+                            '2011-02-04', '2011-01-05', '2011-02-02'],
+                           freq='D')
+        didx = DatetimeIndex(['2011-01-01', '2011-01-03', '2011-01-02',
+                              '2011-02-04', '2011-01-05', '2011-02-02'])
+
+        for idx in [pidx, didx]:
+            ts = Series([1, 2, 3, 4, 5, 6], index=idx)
+            self.assertFalse(ts.index.is_monotonic)
+
+            tm.assert_series_equal(ts['2011-01'], ts.iloc[[0, 1, 2, 4]])
+            tm.assert_series_equal(ts.loc['2011-01'], ts.iloc[[0, 1, 2, 4]])
+
+            tm.assert_series_equal(ts['2011'], ts)
+            tm.assert_series_equal(ts.loc['2011'], ts)
+
+            tm.assert_series_equal(ts['2012'], ts.iloc[0:0])
+
+            with tm.assertRaises(KeyError):
+                ts.loc['2012']
+
+    def test_getitem_loc_non_unique(self):
+        # check compat with DatetimeIndex
+        pidx = PeriodIndex(['2011-01-01', '2011-01-01', '2011-01-02',
+                            '2011-02-01', '2011-01-03', '2011-02-01'],
+                           freq='D')
+        didx = DatetimeIndex(['2011-01-01', '2011-01-01', '2011-01-02',
+                              '2011-02-01', '2011-01-03', '2011-02-01'])
+
+        for idx in [didx, pidx, didx]:
+            ts = Series([1, 2, 3, 4, 5, 6], index=idx)
+            self.assertFalse(ts.index.is_monotonic)
+
+            tm.assert_series_equal(ts['2011-01'], ts.iloc[[0, 1, 2, 4]])
+            tm.assert_series_equal(ts.loc['2011-01'], ts.iloc[[0, 1, 2, 4]])
+
+            tm.assert_series_equal(ts['2011'], ts)
+            tm.assert_series_equal(ts.loc['2011'], ts)
+
+            tm.assert_series_equal(ts['2012'], ts.iloc[0:0])
+
+            with tm.assertRaises(KeyError):
+                ts.loc['2012']
+
+            tm.assert_series_equal(ts['2011-01':'2011-02'], ts)
+            tm.assert_series_equal(ts.loc['2011-01':'2011-02'], ts)
+
+    def test_getitem_loc_partial_month(self):
+        pidx = period_range('2007-01', periods=50, freq='M')
+        didx = pd.date_range('2007-01', periods=50, freq='M')
+
+        for idx in [pidx, didx]:
+            ts = Series(np.random.randn(len(idx)), idx)
+
+            # ToDo: Is this correct?
+            if isinstance(ts.index, PeriodIndex):
+                tm.assert_series_equal(ts['2006'], ts.iloc[0:0])
+                self.assertEqual(ts['2007-05'], ts.iloc[4])
+            else:
+                with tm.assertRaises(KeyError):
+                    ts['2006']
+                self.assert_series_equal(ts['2007-05'], ts.iloc[[4]])
+
+            with tm.assertRaises(KeyError):
+                ts.loc['2006']
+
+            result = ts['2008']
+            self.assertTrue((result.index.year == 2008).all())
+            tm.assert_series_equal(result, ts.iloc[12:24])
+
+            result = ts.loc['2008']
+            self.assertTrue((result.index.year == 2008).all())
+            tm.assert_series_equal(result, ts.iloc[12:24])
+
+            tm.assert_series_equal(ts['2008':'2009'], ts.iloc[12:36])
+            tm.assert_series_equal(ts['2008-1':'2009-12'], ts.iloc[12:36])
+            tm.assert_series_equal(ts['2008Q1':'2009Q4'], ts.iloc[12:36])
+            tm.assert_series_equal(ts[:'2009'], ts.iloc[:36])
+            tm.assert_series_equal(ts['2009':], ts.iloc[24:])
+
+            tm.assert_series_equal(ts.loc['2008':'2009'], ts.iloc[12:36])
+            tm.assert_series_equal(ts.loc['2008-1':'2009-12'], ts.iloc[12:36])
+            tm.assert_series_equal(ts.loc['2008Q1':'2009Q4'], ts.iloc[12:36])
+            tm.assert_series_equal(ts.loc[:'2009'], ts.iloc[:36])
+            tm.assert_series_equal(ts.loc['2009':], ts.iloc[24:])
+
+            orig = ts
+            ts = ts[10:].append(ts[10:])
+            exp = orig[12:36].append(orig[12:36])
+            tm.assert_series_equal(ts['2008':'2009'], exp)
+            tm.assert_series_equal(ts.loc['2008':'2009'], exp)
+
+    def test_getitem_loc_partial_sec(self):
+        pidx = period_range('2010-01-01 22:00:00', periods=10000, freq='S')
+        didx = pd.date_range('2010-01-01 22:00:00', periods=10000, freq='S')
+
+        for idx in [pidx, didx]:
+            ts = Series(np.random.randn(len(idx)), idx)
+
+            tm.assert_series_equal(ts['2010-01-01 23:00'], ts.iloc[3600:3660])
+            tm.assert_series_equal(ts['2010-01-01 23:00':'2010-01-01 23:05'],
+                                   ts.iloc[3600:3960])
+            tm.assert_series_equal(ts['2010-01-01 23:00':], ts.iloc[3600:])
+            tm.assert_series_equal(ts[:'2010-01-01 23:05'], ts.iloc[:3960])
+            tm.assert_series_equal(ts['2010-01-01'], ts[:7200])
+            tm.assert_series_equal(ts['2010-01-01':], ts)
+            tm.assert_series_equal(ts[:'2010-01-01'], ts[:7200])
+            tm.assert_series_equal(ts['2010-01':], ts)
+            tm.assert_series_equal(ts[:'2010-01'], ts)
+            tm.assert_series_equal(ts['2010':], ts)
+            tm.assert_series_equal(ts[:'2010'], ts)
+
+            tm.assert_series_equal(ts.loc['2010-01-01 23:00'],
+                                   ts.iloc[3600:3660])
+            tm.assert_series_equal(ts.loc['2010-01-01 23:00':
+                                          '2010-01-01 23:05'],
+                                   ts.iloc[3600:3960])
+            tm.assert_series_equal(ts.loc['2010-01-01 23:00':], ts.iloc[3600:])
+            tm.assert_series_equal(ts.loc[:'2010-01-01 23:05'], ts.iloc[:3960])
+            tm.assert_series_equal(ts.loc['2010-01-01'], ts[:7200])
+            tm.assert_series_equal(ts.loc['2010-01-01':], ts)
+            tm.assert_series_equal(ts.loc[:'2010-01-01'], ts[:7200])
+            tm.assert_series_equal(ts.loc['2010-01':], ts)
+            tm.assert_series_equal(ts.loc[:'2010-01'], ts)
+            tm.assert_series_equal(ts.loc['2010':], ts)
+            tm.assert_series_equal(ts.loc[:'2010'], ts)
+
+            # ToDo: Is this correct?
+            if isinstance(ts.index, PeriodIndex):
+                self.assertEqual(ts['2010-01-02 00:00:05'], ts.iloc[7205])
+            else:
+                tm.assert_series_equal(ts['2010-01-02 00:00:05'],
+                                       ts.iloc[[7205]])
 
     def test_getitem_datetime(self):
         rng = period_range(start='2012-01-01', periods=10, freq='W-MON')
@@ -3579,6 +3720,105 @@ class TestPeriodIndex(tm.TestCase):
             self.assertEqual(idx.get_loc(None), 1)
             self.assertEqual(idx.get_loc(float('nan')), 1)
             self.assertEqual(idx.get_loc(np.nan), 1)
+
+    def test_get_loc_partial_string(self):
+        # must be compat with DatetimeIndex
+        dtidx = pd.date_range('2011-01-01', '2015-01-01', freq='D')
+        pidx = pd.period_range('2011-01-01', '2015-01-01', freq='D')
+
+        for idx in [dtidx, pidx]:
+            res = idx.get_loc('2011')
+            self.assertEqual(res, slice(0, 365, None))
+
+            res = idx.get_loc('2012-01')
+            self.assertEqual(res, slice(365, 396, None))
+
+            with tm.assertRaisesRegexp(KeyError, '2005'):
+                idx.get_loc('2005')
+
+    def test_slice_indexer_partial_string(self):
+        # must be compat with DatetimeIndex
+        dtidx = pd.date_range('2011-01-01', '2015-01-01', freq='D')
+        pidx = pd.period_range('2011-01-01', '2015-01-01', freq='D')
+
+        for kind in ['loc', 'getitem']:
+            for idx in [dtidx, pidx]:
+                res = idx.slice_indexer('2011', '2012', None, kind=kind)
+                self.assertEqual(res, slice(0, 731, None))
+                res = idx.slice_locs(start='2011', end='2012', kind=kind)
+                self.assertEqual(res, (0, 731))
+
+                res = idx.slice_indexer('2000', '2030', None, kind=kind)
+                self.assertEqual(res, slice(0, 1462, None))
+                res = idx.slice_locs('2000', '2030', None, kind=kind)
+                self.assertEqual(res, (0, 1462))
+
+                res = idx.slice_indexer('2013', None, None, kind=kind)
+                self.assertEqual(res, slice(731, 1462, None))
+                res = idx.slice_locs('2013', None, None, kind=kind)
+                self.assertEqual(res, (731, 1462))
+
+                res = idx.slice_indexer('2013-04', '2014-12', None, kind=kind)
+                self.assertEqual(res, slice(821, 1461, None))
+                res = idx.slice_locs('2013-04', '2014-12', None, kind=kind)
+                self.assertEqual(res, (821, 1461))
+
+    def test_slice_indexer_partial_string_non_monotonic(self):
+        # must be compat with DatetimeIndex
+        dtidx = pd.DatetimeIndex(['2013-03-01', '2011-01-15', '2011-02-01'])
+        pidx = pd.PeriodIndex(['2013-03-01', '2011-01-01', '2011-02-01'],
+                              freq='D')
+
+        for kind in ['loc', 'getitem']:
+            for idx in [dtidx, pidx]:
+                res = idx.slice_indexer('2011-01', '2011-01', None, kind=kind)
+                tm.assert_numpy_array_equal(res, np.array([1], dtype=np.intp))
+                with tm.assertRaises(KeyError):
+                    idx.slice_locs(start='2011-01', end='2012-01', kind=kind)
+
+                res = idx.slice_indexer('2010', '2015', None, kind=kind)
+                self.assertEqual(res, slice(None, None, None))
+                with tm.assertRaises(KeyError):
+                    idx.slice_locs('2010', '2015', None, kind=kind)
+
+                # dti comparison is buggy
+                # res = idx.slice_indexer('2011', None, None, kind=kind)
+                # self.assertEqual(res, slice(None, None, None))
+                # with tm.assertRaises(KeyError):
+                #     idx.slice_locs('2011', None, None, kind=kind)
+
+                res = idx.slice_indexer('2011-01', '2011-2', None, kind=kind)
+                tm.assert_numpy_array_equal(res,
+                                            np.array([1, 2], dtype=np.intp))
+                with tm.assertRaises(KeyError):
+                    idx.slice_locs('2013-04', '2014-12', None, kind=kind)
+
+    def test_slice_bound_partial_string(self):
+        # must be compat with DatetimeIndex
+        dtidx = pd.date_range('2011-01-01', '2015-01-01', freq='D')
+        pidx = pd.period_range('2011-01-01', '2015-01-01', freq='D')
+
+        for kind in ['loc', 'getitem']:
+            for idx in [dtidx, pidx]:
+                res = idx.get_slice_bound('2011-05', 'left', kind=kind)
+                self.assertEqual(res, 120)
+                res = idx.get_slice_bound('2011-05', 'right', kind=kind)
+                self.assertEqual(res, 151)
+
+                res = idx.get_slice_bound('2011-05', 'left', kind=kind)
+                self.assertEqual(res, 120)
+                res = idx.get_slice_bound('2011-05', 'right', kind=kind)
+                self.assertEqual(res, 151)
+
+                res = idx.get_slice_bound('2000-01', 'left', kind=kind)
+                self.assertEqual(res, 0)
+                res = idx.get_slice_bound('2000-01', 'right', kind=kind)
+                self.assertEqual(res, 0)
+
+                res = idx.get_slice_bound('2020-05', 'left', kind=kind)
+                self.assertEqual(res, 1462)
+                res = idx.get_slice_bound('2020-05', 'right', kind=kind)
+                self.assertEqual(res, 1462)
 
     def test_append_concat(self):
         # #1815

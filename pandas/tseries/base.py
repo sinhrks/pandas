@@ -811,6 +811,48 @@ class DatetimeIndexOpsMixin(object):
         result = result.replace("'", "")
         return result
 
+    def slice_indexer(self, start=None, end=None, step=None, kind=None):
+        """
+        Return indexer for specified label slice.
+        Index.slice_indexer, customized to handle time slicing.
+
+        In addition to functionality provided by Index.slice_indexer, does the
+        following:
+
+        - if `start` and `end` are both either string or None perform
+          value-based selection in non-monotonic cases.
+        """
+        try:
+            return Index.slice_indexer(self, start, end, step, kind=kind)
+        except KeyError:
+            if ((start is None or isinstance(start, compat.string_types)) and
+                    (end is None or isinstance(end, compat.string_types))):
+                mask = True
+                if start is not None:
+                    start_casted = self._maybe_cast_slice_bound(
+                        start, 'left', kind)
+                    mask = start_casted <= self
+
+                if end is not None:
+                    end_casted = self._maybe_cast_slice_bound(
+                        end, 'right', kind)
+                    mask = (self <= end_casted) & mask
+
+                indexer = mask.nonzero()[0][::step]
+                if len(indexer) == len(self):
+                    return slice(None)
+                else:
+                    return indexer
+            else:
+                raise
+
+    def _maybe_cast_slice_bound(self, label, side, kind):
+        """
+        If label is a string or a datetime, cast it to internal representation
+        according to resolution.
+        """
+        raise AbstractMethodError(self)
+
 
 def _ensure_datetimelike_to_i8(other):
     """ helper for coercing an input scalar or array to i8 """
