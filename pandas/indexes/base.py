@@ -33,7 +33,8 @@ from pandas.types.common import (_ensure_int64,
                                  needs_i8_conversion,
                                  is_iterator, is_list_like,
                                  is_scalar)
-from pandas.types.cast import _coerce_indexer_dtype
+from pandas.types.cast import (_coerce_indexer_dtype, _astype_nansafe,
+                               _maybe_promote)
 from pandas.core.common import (is_bool_indexer,
                                 _values_from_object,
                                 _asarray_tuplesafe)
@@ -186,49 +187,25 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
                     return result
 
             if dtype is not None:
-                try:
-
-                    # we need to avoid having numpy coerce
-                    # things that look like ints/floats to ints unless
-                    # they are actually ints, e.g. '0' and 0.0
-                    # should not be coerced
-                    # GH 11836
-                    if is_integer_dtype(dtype):
-                        inferred = lib.infer_dtype(data)
-                        if inferred == 'integer':
-                            data = np.array(data, copy=copy, dtype=dtype)
-                        elif inferred in ['floating', 'mixed-integer-float']:
-
-                            # if we are actually all equal to integers
-                            # then coerce to integer
-                            from .numeric import Int64Index, Float64Index
-                            try:
-                                res = data.astype('i8')
-                                if (res == data).all():
-                                    return Int64Index(res, copy=copy,
-                                                      name=name)
-                            except (TypeError, ValueError):
-                                pass
-
-                            # return an actual float index
-                            return Float64Index(data, copy=copy, dtype=dtype,
-                                                name=name)
-
-                        elif inferred == 'string':
-                            pass
-                        else:
-                            data = data.astype(dtype)
-                    elif is_float_dtype(dtype):
-                        inferred = lib.infer_dtype(data)
-                        if inferred == 'string':
-                            pass
-                        else:
-                            data = data.astype(dtype)
+                # we need to avoid having numpy coerce
+                # things that look like ints/floats to ints unless
+                # they are actually ints, e.g. '0' and 0.0
+                # should not be coerced
+                # GH 11836
+                if is_integer_dtype(dtype):
+                    inferred = lib.infer_dtype(data)
+                    if inferred == 'string':
+                        pass
                     else:
-                        data = np.array(data, dtype=dtype, copy=copy)
-
-                except (TypeError, ValueError):
-                    pass
+                        data = _astype_nansafe(data, dtype, copy=copy)
+                elif is_float_dtype(dtype):
+                    inferred = lib.infer_dtype(data)
+                    if inferred == 'string':
+                        pass
+                    else:
+                        data = data.astype(dtype)
+                else:
+                    data = np.array(data, dtype=dtype, copy=copy)
 
             # maybe coerce to a sub-class
             from pandas.tseries.period import (PeriodIndex,
@@ -532,8 +509,9 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         """
         if other is None:
             other = self._na_value
+        dtype, other = _maybe_promote(self.dtype, other)
         values = np.where(cond, self.values, other)
-        return self._shallow_copy_with_infer(values, dtype=self.dtype)
+        return self._shallow_copy_with_infer(values, dtype=dtype)
 
     def ravel(self, order='C'):
         """
@@ -597,7 +575,7 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         ----------
         item : scalar item to coerce
         """
-        return Index([item], dtype=self.dtype, **self._get_attributes_dict())
+        return Index([item], **self._get_attributes_dict())
 
     _index_shared_docs['copy'] = """
         Make a copy of this object.  Name and dtype sets those attributes on
