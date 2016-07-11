@@ -42,6 +42,7 @@ cimport util
 
 from datetime cimport *
 from khash cimport *
+from lib cimport scalar_compare
 cimport cython
 
 from datetime import timedelta, datetime
@@ -1021,9 +1022,21 @@ cdef class _Timestamp(datetime):
             if isinstance(other, np.ndarray):
                 if other.dtype == np.object:
                     # other may be a Series/DataFrame
-                    return self._compare_object_array(other, op)
+
+                    if other.ndim > 1:
+                        shape = other.shape
+                        other = other.ravel()
+                        # result = self._compare_object_array(other, op)
+                        result = scalar_compare(other, self, _reverse_ops[op])
+                        result = result.reshape(shape)
+                    else:
+                        result = scalar_compare(other, self, _reverse_ops[op])
+                        # result = self._compare_object_array(other, op)
+                    return result
+
                 return PyObject_RichCompare(other, self, _reverse_ops[op])
             else:
+                # other may be a Series/DataFrame
                 return NotImplemented
         else:
             if op == Py_EQ:
@@ -1040,7 +1053,7 @@ cdef class _Timestamp(datetime):
 
         cdef:
             Py_ssize_t i
-            ndarray[int8_t, ndim=1] result
+            ndarray[int8_t] result
 
         result = np.empty(len(other), dtype=np.int8)
         for i in range(len(other)):

@@ -774,7 +774,9 @@ def maybe_booleans_to_slice(ndarray[uint8_t] mask):
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def scalar_compare(ndarray[object] values, object val, object op):
+cpdef ndarray[uint8_t] scalar_compare(ndarray[object] values,
+                                      object val, object op):
+
     import operator
     cdef:
         Py_ssize_t i, n = len(values)
@@ -795,6 +797,9 @@ def scalar_compare(ndarray[object] values, object val, object op):
         flag = cpython.Py_EQ
     elif op is operator.ne:
         flag = cpython.Py_NE
+    elif isinstance(op, int):
+        # op may be passed from cdef class
+        flag = int(op)
     else:
         raise ValueError('Unrecognized operator')
 
@@ -872,6 +877,7 @@ def vec_compare(ndarray[object] left, ndarray[object] right, object op):
     if n != len(right):
         raise ValueError('Arrays were different lengths: %d vs %d'
                          % (n, len(right)))
+
 
     if op is operator.lt:
         flag = cpython.Py_LT
