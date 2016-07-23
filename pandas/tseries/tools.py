@@ -178,7 +178,7 @@ def _guess_datetime_format_for_array(arr, **kwargs):
 @deprecate_kwarg(old_arg_name='coerce', new_arg_name='errors',
                  mapping={True: 'coerce', False: 'raise'})
 def to_datetime(arg, errors='raise', dayfirst=False, yearfirst=False,
-                utc=None, box=True, format=None, exact=True, coerce=None,
+                utc=None, tz=None, box=True, format=None, exact=True, coerce=None,
                 unit=None, infer_datetime_format=False):
     """
     Convert argument to datetime.
@@ -297,8 +297,8 @@ def to_datetime(arg, errors='raise', dayfirst=False, yearfirst=False,
     """
 
     from pandas.tseries.index import DatetimeIndex
-
-    tz = 'utc' if utc else None
+    if utc is not None:
+        raise ValueError
 
     def _convert_listlike(arg, box, format, name=None, tz=tz):
 
@@ -329,11 +329,14 @@ def to_datetime(arg, errors='raise', dayfirst=False, yearfirst=False,
             result = tslib.array_with_unit_to_datetime(arg, unit,
                                                        errors=errors)
             if box:
-                if errors == 'ignore':
-                    from pandas import Index
-                    return Index(result)
-
-                return DatetimeIndex(result, tz=tz, name=name)
+                try:
+                    return DatetimeIndex(result, tz=tz, name=name)
+                except ValueError:
+                    if errors == 'ignore':
+                        pass
+                    else:
+                        raise
+                return Index(result, name=name)
             return result
         elif getattr(arg, 'ndim', 1) > 1:
             raise TypeError('arg must be a string, datetime, list, tuple, '

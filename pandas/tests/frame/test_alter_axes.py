@@ -271,7 +271,13 @@ class TestDataFrameAlterAxes(tm.TestCase, TestData):
         # GH 12358
         # tz-aware Series should retain the tz
         i = pd.to_datetime(["2014-01-01 10:10:10"],
-                           utc=True).tz_convert('Europe/Rome')
+                           tz='UTC').tz_convert('Europe/Rome')
+        df = DataFrame({'i': i})
+        self.assertEqual(df.set_index(i).index[0].hour, 11)
+        self.assertEqual(pd.DatetimeIndex(pd.Series(df.i))[0].hour, 11)
+        self.assertEqual(df.set_index(df.i).index[0].hour, 11)
+
+        i = pd.to_datetime(["2014-01-01 10:10:10"], tz='Europe/Rome')
         df = DataFrame({'i': i})
         self.assertEqual(df.set_index(i).index[0].hour, 11)
         self.assertEqual(pd.DatetimeIndex(pd.Series(df.i))[0].hour, 11)

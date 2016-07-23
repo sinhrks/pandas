@@ -2245,13 +2245,14 @@ Thur,Lunch,Yes,51.51,17"""
 
     def test_set_index_datetime(self):
         # GH 3950
-        df = pd.DataFrame(
+        orig = pd.DataFrame(
             {'label': ['a', 'a', 'a', 'b', 'b', 'b'],
              'datetime': ['2011-07-19 07:00:00', '2011-07-19 08:00:00',
                           '2011-07-19 09:00:00', '2011-07-19 07:00:00',
                           '2011-07-19 08:00:00', '2011-07-19 09:00:00'],
              'value': range(6)})
-        df.index = pd.to_datetime(df.pop('datetime'), utc=True)
+        df = orig.copy()
+        df.index = pd.to_datetime(df.pop('datetime'), tz='UTC')
         df.index = df.index.tz_localize('UTC').tz_convert('US/Pacific')
 
         expected = pd.DatetimeIndex(['2011-07-19 07:00:00',
@@ -2259,6 +2260,13 @@ Thur,Lunch,Yes,51.51,17"""
                                      '2011-07-19 09:00:00'], name='datetime')
         expected = expected.tz_localize('UTC').tz_convert('US/Pacific')
 
+        df = df.set_index('label', append=True)
+        self.assert_index_equal(df.index.levels[0], expected)
+        self.assert_index_equal(df.index.levels[1],
+                                pd.Index(['a', 'b'], name='label'))
+
+        df = orig.copy()
+        df.index = pd.to_datetime(df.pop('datetime'), tz='US/Pacific')
         df = df.set_index('label', append=True)
         self.assert_index_equal(df.index.levels[0], expected)
         self.assert_index_equal(df.index.levels[1],

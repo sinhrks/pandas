@@ -2252,7 +2252,12 @@ class TestToDatetime(tm.TestCase):
                         us_eastern.localize(datetime(year=2000, month=6, day=1,
                                                      hour=3, minute=0))],
                        dtype=object)
-        result = pd.to_datetime(arr, utc=True)
+        result = pd.to_datetime(arr)
+        expected = DatetimeIndex(['2000-01-01 03:00:00+05:00',
+                                  '2000-06-01 03:00:00+04:00'],
+                                 dtype='datetime64[ns, US/Eastern]', freq=None)
+
+        result = pd.to_datetime(arr).tz_convert('UTC')
         expected = DatetimeIndex(['2000-01-01 08:00:00+00:00',
                                   '2000-06-01 07:00:00+00:00'],
                                  dtype='datetime64[ns, UTC]', freq=None)
@@ -2264,7 +2269,7 @@ class TestToDatetime(tm.TestCase):
         end = pd.Timestamp('2014-01-03', tz='utc')
         date_range = pd.bdate_range(start, end)
 
-        result = pd.to_datetime(date_range, utc=True)
+        result = pd.to_datetime(date_range, tz='UTC')
         expected = pd.DatetimeIndex(data=date_range)
         tm.assert_index_equal(result, expected)
 
@@ -2283,7 +2288,7 @@ class TestToDatetime(tm.TestCase):
                         datetime(2000, 6, 1, 3, 0, tzinfo=tz2)],
                        dtype=object)
 
-        result = pd.to_datetime(arr, errors='coerce', utc=True)
+        result = pd.to_datetime(arr, errors='coerce', tz='UTC')
         expected = DatetimeIndex(['2000-01-01 08:00:00+00:00',
                                   '2000-06-01 07:00:00+00:00'],
                                  dtype='datetime64[ns, UTC]', freq=None)
@@ -2299,7 +2304,7 @@ class TestToDatetime(tm.TestCase):
         result = pd.to_datetime(i, errors='coerce')
         tm.assert_index_equal(result, i)
 
-        result = pd.to_datetime(i, errors='coerce', utc=True)
+        result = pd.to_datetime(i, errors='coerce', tz='UTC')
         expected = pd.DatetimeIndex(['2000-01-01 13:00:00'],
                                     dtype='datetime64[ns, UTC]')
         tm.assert_index_equal(result, expected)

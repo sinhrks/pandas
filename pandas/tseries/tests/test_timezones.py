@@ -675,7 +675,7 @@ class TestTimeZoneSupportPytz(tm.TestCase):
         result = to_datetime(dates_aware)
         self.assertTrue(self.cmptz(result.tz, self.tz('US/Eastern')))
 
-        converted = to_datetime(dates_aware, utc=True)
+        converted = to_datetime(dates_aware).tz_convert('UTC')
         ex_vals = np.array([Timestamp(x).value for x in dates_aware])
         self.assert_numpy_array_equal(converted.asi8, ex_vals)
         self.assertIs(converted.tz, pytz.utc)
@@ -684,7 +684,7 @@ class TestTimeZoneSupportPytz(tm.TestCase):
         from dateutil.parser import parse
         arr = np.array([parse('2012-06-13T01:39:00Z')], dtype=object)
 
-        result = to_datetime(arr, utc=True)
+        result = to_datetime(arr, tz='UTC')
         self.assertIs(result.tz, pytz.utc)
 
     def test_to_datetime_tzlocal(self):
@@ -695,12 +695,12 @@ class TestTimeZoneSupportPytz(tm.TestCase):
 
         arr = np.array([dt], dtype=object)
 
-        result = to_datetime(arr, utc=True)
+        result = to_datetime(arr).tz_convert('UTC')
         self.assertIs(result.tz, pytz.utc)
 
         rng = date_range('2012-11-03 03:00', '2012-11-05 03:00', tz=tzlocal())
         arr = rng.to_pydatetime()
-        result = to_datetime(arr, utc=True)
+        result = to_datetime(arr).tz_convert(tz='UTC')
         self.assertIs(result.tz, pytz.utc)
 
     def test_frame_no_datetime64_dtype(self):

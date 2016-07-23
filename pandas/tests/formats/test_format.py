@@ -4270,7 +4270,7 @@ class TestDatetime64Formatter(tm.TestCase):
         formatter = fmt.Datetime64Formatter(x, formatter=format_func)
         result = formatter.get_result()
         self.assertEqual(result, ['2016-01', '2016-02'])
-                       
+
     def test_datetime64formatter_hoursecond(self):
 
         x = Series(pd.to_datetime(['10:10:10.100', '12:12:12.120'],
@@ -4306,11 +4306,11 @@ class TestDatetimeIndexFormat(tm.TestCase):
         self.assertEqual(formatted[1], "NaT")
 
     def test_date_tz(self):
-        formatted = pd.to_datetime([datetime(2013, 1, 1)], utc=True).format()
+        formatted = pd.to_datetime([datetime(2013, 1, 1)], tz='UTC').format()
         self.assertEqual(formatted[0], "2013-01-01 00:00:00+00:00")
 
         formatted = pd.to_datetime(
-            [datetime(2013, 1, 1), pd.NaT], utc=True).format()
+            [datetime(2013, 1, 1), pd.NaT], tz='UTC').format()
         self.assertEqual(formatted[0], "2013-01-01 00:00:00+00:00")
 
     def test_date_explict_date_format(self):
