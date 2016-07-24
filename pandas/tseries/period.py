@@ -21,6 +21,7 @@ from pandas.types.common import (is_integer,
                                  _ensure_object)
 from pandas.types.dtypes import PeriodDtype
 from pandas.types.generic import ABCSeries
+from pandas.types.missing import isnull
 
 import pandas.tseries.frequencies as frequencies
 from pandas.tseries.frequencies import get_freq_code as _gfc
@@ -751,9 +752,29 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
             except TypeError:
                 pass
 
-            key = Period(key, self.freq).ordinal
-            return com._maybe_box(self, self._engine.get_value(s, key),
-                                  series, key)
+            ordinal = self._maybe_period_indexer(key)
+
+            try:
+                return com._maybe_box(self, self._engine.get_value(s, ordinal),
+                                      series, ordinal)
+            except KeyError:
+                raise KeyError(key)
+
+    def _maybe_period_indexer(self, key):
+        """
+        convert passed key to internal repr (Period.ordinal or iNaT)
+        if possible
+        """
+        if isnull(key):
+            ordinal = tslib.iNaT
+        elif isinstance(key, Period):
+            if self.freq != key.freq:
+                # do not raise IncompatibleFrequency for consistency
+                raise KeyError(key)
+            ordinal = key.ordinal
+        else:
+            ordinal = Period(key, self.freq).ordinal
+        return ordinal
 
     def get_indexer(self, target, method=None, limit=None, tolerance=None):
         target = _ensure_index(target)
@@ -779,6 +800,12 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
             res = res.dropna()
         return res
 
+    def get_indexer_non_unique(self, target):
+        if hasattr(target, 'freq') and target.freq != self.freq:
+            msg = _DIFFERENT_FREQ_INDEX.format(self.freqstr, target.freqstr)
+            raise IncompatibleFrequency(msg)
+        return Index.get_indexer_non_unique(self, target)
+
     def get_loc(self, key, method=None, tolerance=None):
         """
         Get integer location for requested label
@@ -799,19 +826,12 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
             except TypeError:
                 pass
 
-            try:
-                key = Period(key, freq=self.freq)
-            except ValueError:
-                # we cannot construct the Period
-                # as we have an invalid type
-                raise KeyError(key)
+            ordinal = self._maybe_period_indexer(key)
 
             try:
-                ordinal = tslib.iNaT if key is tslib.NaT else key.ordinal
                 if tolerance is not None:
                     tolerance = self._convert_tolerance(tolerance)
                 return self._int64index.get_loc(ordinal, method, tolerance)
-
             except KeyError:
                 raise KeyError(key)
 

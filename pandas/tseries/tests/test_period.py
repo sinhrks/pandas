@@ -2424,6 +2424,86 @@ class TestPeriodIndex(tm.TestCase):
         result = s.iat[0]
         self.assertEqual(expected, result)
 
+    def test_indexing_period(self):
+        idx = pd.period_range('2011-01-01', freq='D', periods=5)
+        s = pd.Series(np.arange(5), index=idx)
+
+        exp_index = pd.PeriodIndex(['2011-01-01'], freq='D')
+        exp = pd.Series([0], index=exp_index)
+
+        indexer = pd.Period('2011-01-01',freq='D')
+        tm.assert_series_equal(s[[indexer]], exp)
+        tm.assert_series_equal(s.loc[[indexer]], exp)
+        self.assertEqual(s[indexer], 0)
+        self.assertEqual(s.loc[indexer], 0)
+
+        exp_index = pd.PeriodIndex(['2011-01-01', '2011-01-3'], freq='D')
+        exp = pd.Series([0, 2], index=exp_index)
+
+        indexer = [pd.Period('2011-01-01',freq='D'),
+                   pd.Period('2011-01-03', freq='D')]
+        tm.assert_series_equal(s[indexer], exp)
+        tm.assert_series_equal(s.loc[indexer], exp)
+
+        # different freq
+        indexer = pd.Period('2011-01',freq='M')
+        msg = "Input has different freq=M from PeriodIndex"
+        with tm.assertRaises(period.IncompatibleFrequency):
+            s[[indexer]]
+        with tm.assertRaisesRegexp(KeyError, '2011-01'):
+            s.loc[[indexer]]
+        with tm.assertRaisesRegexp(KeyError, '2011-01'):
+            s[indexer]
+        msg = "the label \\[2011-01\\] is not in the \\[index\\]"
+        with tm.assertRaisesRegexp(KeyError, msg):
+            s.loc[indexer]
+
+    def test_indexing_period_nonmonotonic(self):
+        # non-monotonic
+        idx = pd.PeriodIndex(['2011-03', '2011-02', '2011-04', '2011-01',
+                              '2011-03'], freq='M')
+        s = pd.Series(np.arange(5), index=idx)
+
+        exp_index = pd.PeriodIndex(['2011-03', '2011-03'], freq='M')
+        exp = pd.Series([0, 4], index=exp_index)
+
+        indexer = pd.Period('2011-03',freq='M')
+        tm.assert_series_equal(s[[indexer]], exp)
+        tm.assert_series_equal(s.loc[[indexer]], exp)
+        # because of duplicates, return Series
+        tm.assert_series_equal(s[indexer], exp)
+        tm.assert_series_equal(s.loc[indexer], exp)
+
+        exp_index = pd.PeriodIndex(['2011-04'], freq='M')
+        exp = pd.Series([2], index=exp_index)
+
+        indexer = pd.Period('2011-04',freq='M')
+        tm.assert_series_equal(s[[indexer]], exp)
+        tm.assert_series_equal(s.loc[[indexer]], exp)
+        self.assertEqual(s[indexer], 2)
+        self.assertEqual(s.loc[indexer], 2)
+
+        exp_index = pd.PeriodIndex(['2011-02', '2011-01'], freq='M')
+        exp = pd.Series([1, 3], index=exp_index)
+
+        indexer = [pd.Period('2011-02',freq='M'),
+                   pd.Period('2011-01', freq='M')]
+        tm.assert_series_equal(s[indexer], exp)
+        tm.assert_series_equal(s.loc[indexer], exp)
+
+        # different freq
+        indexer = pd.Period('2011-01-01',freq='D')
+        msg = "Input has different freq=D from PeriodIndex"
+        with tm.assertRaisesRegexp(period.IncompatibleFrequency, msg):
+            s[[indexer]]
+        with tm.assertRaisesRegexp(KeyError, '2011-01'):
+            s.loc[[indexer]]
+        with tm.assertRaisesRegexp(KeyError, '2011-01'):
+            s[indexer]
+        msg = "the label \\[2011-01-01\\] is not in the \\[index\\]"
+        with tm.assertRaisesRegexp(KeyError, msg):
+            s.loc[indexer]
+
     def test_frame_setitem(self):
         rng = period_range('1/1/2000', periods=5, name='index')
         df = DataFrame(randn(5, 3), index=rng)

@@ -1445,6 +1445,7 @@ Bug Fixes
 - Bug in ``Index`` and ``Series`` may ignore ``np.datetime64('nat')`` and ``np.timdelta64('nat')`` to infer dtype (:issue:`13324`)
 - Bug in ``PeriodIndex`` and ``Period`` subtraction raises ``AttributeError`` (:issue:`13071`)
 - Bug in ``PeriodIndex`` construction returning a ``float64`` index in some circumstances (:issue:`13067`)
+- Bug in non-monotonic ``PeriodIndex`` may return incorrect value via slicing (:issue:`7710`)
 - Bug in ``.resample(..)`` with a ``PeriodIndex`` not changing its ``freq`` appropriately when empty (:issue:`13067`)
 - Bug in ``.resample(..)`` with a ``PeriodIndex`` not retaining its type or name with an empty ``DataFrame`` appropriately when empty (:issue:`13212`)
 - Bug in ``groupby(..).apply(..)`` when the passed function returns scalar values per group (:issue:`13468`).
