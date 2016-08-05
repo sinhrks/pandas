@@ -14,8 +14,8 @@ from .common import (_ensure_object, is_bool, is_integer, is_float,
                      is_float_dtype, is_complex_dtype,
                      is_integer_dtype, is_datetime_or_timedelta_dtype,
                      is_bool_dtype, is_scalar,
-                     _string_dtypes,
-                     _coerce_to_dtype,
+                     _string_dtypes, is_string_dtype,
+                     _coerce_to_dtype, pandas_dtype,
                      _ensure_int8, _ensure_int16,
                      _ensure_int32, _ensure_int64,
                      _NS_DTYPE, _TD_DTYPE, _INT64_DTYPE,
@@ -763,6 +763,109 @@ def _possibly_infer_to_datetimelike(value, convert_dates=False):
                     value = _try_datetime(v)
 
     return value
+
+
+def _possibly_cast_to_internal(values, dtype=None, copy=False,
+                               errors='raise'):
+
+    if dtype is None:
+        # no need to cast
+        if not is_object_dtype(values):
+            if copy:
+                return values.copy()
+            else:
+                return values
+
+        inferred = lib.infer_dtype(values)
+        if inferred == 'integer':
+            return values.astype(np.int64, copy=copy)
+        elif inferred in ['floating', 'mixed-integer-float']:
+            return values.astype(np.float64, copy=copy)
+        elif inferred == 'boolean':
+            return values.astype(np.bool_, copy=copy)
+        elif inferred != 'string':
+            if inferred.startswith('datetime'):
+                if lib.is_datetime_with_singletz_array(values):
+                    try:
+                        from pandas.tseries.tools import to_datetime
+                        res = to_datetime(values)
+                        return res if res.tz is not None else res._values
+                    except tslib.OutOfBoundsDatetime:
+                        pass
+
+            elif inferred.startswith('timedelta'):
+                from pandas.tseries.timedeltas import to_timedelta
+                return to_timedelta(values)._values
+            elif inferred == 'period':
+                from pandas.tseries.period import (PeriodIndex,
+                                                   IncompatibleFrequency)
+                try:
+                    return PeriodIndex(values)
+                except IncompatibleFrequency:
+                    pass
+        return values
+
+    else:
+        dtype = pandas_dtype(dtype)
+
+        if is_extension_type(dtype):
+            if is_categorical_dtype(dtype):
+                from pandas.core.categorical import Categorical
+                return Categorical(values)
+            elif is_datetime64tz_dtype(dtype):
+                from pandas.tseries.index import DatetimeIndex
+                return DatetimeIndex(values, dtype=dtype)
+            else:
+                raise NotImplementedError(dtype)
+
+        if is_string_dtype(dtype):
+            dtype = np.object_
+
+        if not is_object_dtype(values):
+            # msut be int64 / datetime/timedelta ns?
+            if is_dtype_equal(values.dtype, _INT64_DTYPE):
+                if dtype in _DATELIKE_DTYPES:
+                    if copy is False:
+                        return values.view(dtype)
+            if is_float_dtype(values):
+                if is_integer_dtype(dtype):
+                    res = values.astype('i8')
+                    if (res == values).all():
+                        return values.astype(np.int64, copy=copy)
+                    else:
+                        if copy:
+                            return values.copy()
+                        else:
+                            return values
+
+            return values.astype(dtype, copy=copy)
+
+        try:
+            # we need to avoid having numpy coerce
+            # things that look like ints/floats to ints unless
+            # they are actually ints, e.g. '0' and 0.0
+            # should not be coerced
+            # GH 11836
+            if is_integer_dtype(dtype):
+                inferred = lib.infer_dtype(values)
+                if inferred in 'integer':
+                    return values.astype(np.int64, copy=copy)
+                elif inferred in ['floating', 'mixed-integer-float']:
+                    # if we are actually all equal to integers
+                    # then coerce to integer
+                    res = values.astype('i8')
+                    if (res == values).all():
+                        return values.astype(np.int64, copy=copy)
+                    # return values.astype(np.float64)
+            # else:
+
+            values = values.astype(dtype, copy=copy)
+
+        except (TypeError, ValueError):
+            if errors == 'raise':
+                raise
+
+        return values
 
 
 def _possibly_cast_to_datetime(value, dtype, errors='raise'):

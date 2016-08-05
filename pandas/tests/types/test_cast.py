@@ -10,13 +10,15 @@ import nose
 from datetime import datetime
 import numpy as np
 
+import pandas as pd
 from pandas import Timedelta, Timestamp
 from pandas.types.cast import (_possibly_downcast_to_dtype,
                                _possibly_convert_objects,
                                _infer_dtype_from_scalar,
                                _maybe_convert_string_to_object,
                                _maybe_convert_scalar,
-                               _find_common_type)
+                               _find_common_type,
+                               _possibly_cast_to_internal)
 from pandas.types.dtypes import (CategoricalDtype,
                                  DatetimeTZDtype, PeriodDtype)
 from pandas.util import testing as tm
@@ -201,6 +203,121 @@ class TestConvert(tm.TestCase):
 
         out = _possibly_convert_objects(values, copy=True)
         self.assertTrue(values is not out)
+
+    def test_possibly_cast_to_internal_copy_from_int(self):
+        orig = np.array([1, 2, 3], dtype=np.int64)
+
+        res = _possibly_cast_to_internal(orig)
+        tm.assert_numpy_array_equal(res, orig)
+        self.assertTrue(res is orig)
+
+        res = _possibly_cast_to_internal(orig, copy=True)
+        tm.assert_numpy_array_equal(res, orig)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is not orig)
+
+        res = _possibly_cast_to_internal(orig, dtype=np.float64, copy=True)
+        exp = np.array([1., 2., 3.], dtype=np.float64)
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is not orig)
+
+        res = _possibly_cast_to_internal(orig, dtype='datetime64[ns]')
+        exp = np.array([1, 2, 3], dtype='datetime64[ns]')
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is orig)
+
+        res = _possibly_cast_to_internal(orig, dtype='datetime64[ms]')
+        exp = np.array([1, 2, 3], dtype='datetime64[ms]')
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is not orig)
+
+        res = _possibly_cast_to_internal(orig, dtype='timedelta64[ns]')
+        exp = np.array([1, 2, 3], dtype='timedelta64[ns]')
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is orig)
+
+        res = _possibly_cast_to_internal(orig, dtype='timedelta64[ms]')
+        exp = np.array([1, 2, 3], dtype='timedelta64[ms]')
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is not orig)
+
+        # object dtype
+        orig = np.array([1, 2, 3], dtype=object)
+        exp = np.array([1, 2, 3], dtype=np.int64)
+        res = _possibly_cast_to_internal(orig)
+        tm.assert_numpy_array_equal(res, exp)
+        self.assertTrue(res is not orig)
+        self.assertTrue(res.base is not orig)
+
+    def test_possibly_cast_to_internal_str(self):
+        orig = np.array(['a', 'b', 'c'], dtype=object)
+
+        res = _possibly_cast_to_internal(orig, dtype='str')
+        tm.assert_numpy_array_equal(res, orig)
+        self.assertTrue(res is orig)
+
+        res = _possibly_cast_to_internal(orig, dtype='str', copy=True)
+        tm.assert_numpy_array_equal(res, orig)
+        self.assertTrue(res is not orig)
+
+        msg = 'could not convert string to float'
+        with tm.assertRaisesRegexp(ValueError, msg):
+            _possibly_cast_to_internal(orig, dtype=np.float64)
+
+    def test_possibly_cast_to_internal_categorical(self):
+        orig = np.array([1, 2, 3], dtype=np.int64)
+
+        res = _possibly_cast_to_internal(orig, dtype='category')
+        exp = pd.Categorical(orig)
+        tm.assert_categorical_equal(res, exp)
+        self.assertTrue(res.categories.values.base is not orig)
+
+        orig = np.array([1, 2, 3], dtype=object)
+
+        res = _possibly_cast_to_internal(orig, dtype='category')
+        tm.assert_categorical_equal(res, exp)
+        self.assertTrue(res.categories.values.base is not orig)
+
+    def test_possibly_cast_to_internal_datetimetz(self):
+        orig = np.array([1, 2, 3], dtype=np.int64)
+        dtype = 'datetime64[ns, US/Eastern]'
+
+        res = _possibly_cast_to_internal(orig, dtype=dtype)
+        exp = pd.DatetimeIndex(orig, tz='US/Eastern')
+        tm.assert_index_equal(res, exp)
+        self.assertTrue(res.values.base is not orig)
+
+        orig = np.array([1, 2, 3], dtype=object)
+        res = _possibly_cast_to_internal(orig, dtype=dtype)
+        tm.assert_index_equal(res, exp)
+        self.assertTrue(res.values.base is not orig)
+
+
+class TestConstructor(tm.TestCase):
+
+    def test_string_to_numeric(self):
+        orig = ['A', 'B', 'C']
+
+        for val in [orig, np.array(orig), np.array(orig, dtype=object)]:
+
+            msg = 'could not convert string to float'
+            with tm.assertRaisesRegexp(ValueError, msg):
+                pd.Series(orig, dtype=np.float64)
+
+            with tm.assertRaisesRegexp(ValueError, msg):
+                pd.Index(orig, dtype=np.float64)
+
+            msg = 'invalid literal for int\\(\\) with base 10: '
+            with tm.assertRaisesRegexp(ValueError, msg):
+                pd.Series(orig, dtype=np.int64)
+
+            with tm.assertRaisesRegexp(ValueError, msg):
+                pd.Index(orig, dtype=np.int64)
 
 
 class TestCommonTypes(tm.TestCase):

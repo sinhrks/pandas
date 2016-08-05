@@ -55,8 +55,13 @@ class TestDataFrameConstructors(tm.TestCase, TestData):
 
         self.assertEqual(self.mixed_frame['foo'].dtype, np.object_)
 
+    def test_constructor_invalid_dtype(self):
+        msg = "could not convert string to float"
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DataFrame({'a': ['a', 'b', 'c']}, dtype=np.float64)
+
     def test_constructor_cast_failure(self):
-        foo = DataFrame({'a': ['a', 'b', 'c']}, dtype=np.float64)
+        foo = DataFrame({'a': ['a', 'b', 'c']}, dtype=object)
         self.assertEqual(foo['a'].dtype, object)
 
         # GH 3010, constructing with odd arrays
@@ -66,8 +71,8 @@ class TestDataFrameConstructors(tm.TestCase, TestData):
         df['foo'] = np.ones((4, 2)).tolist()
 
         # this is not ok
-        self.assertRaises(ValueError, df.__setitem__, tuple(['test']),
-                          np.ones((4, 2)))
+        with self.assertRaises(ValueError):
+            df['test'] =  np.ones((4, 2))
 
         # this is ok
         df['foo2'] = np.ones((4, 2)).tolist()
@@ -394,7 +399,12 @@ class TestDataFrameConstructors(tm.TestCase, TestData):
             'A': dict(zip(range(20), tm.makeStringIndex(20))),
             'B': dict(zip(range(15), randn(15)))
         }
-        frame = DataFrame(test_data, dtype=float)
+
+        msg = "could not convert string to float"
+        with tm.assertRaisesRegexp(ValueError, msg):
+            DataFrame(test_data, dtype=float)
+
+        frame = DataFrame(test_data)
         self.assertEqual(len(frame), 20)
         self.assertEqual(frame['A'].dtype, np.object_)
         self.assertEqual(frame['B'].dtype, np.float64)

@@ -286,13 +286,19 @@ class TestDataFrameBlockInternals(tm.TestCase, TestData):
                            ("B", "str"),
                            ("C", "int32")])
 
-        # these work (though results may be unexpected)
+        # these won't work
+        # ToDo: must raise
         f('int64')
-        f('float64')
+
+        msg = ("float\\(\\) argument must be a string or a number, "
+               "not 'datetime.datetime'")
+        with tm.assertRaisesRegexp(TypeError, msg):
+            f('float64')
 
         # 10822
         # invalid error message on dt inference
-        if not compat.is_platform_windows():
+        msg = ('Error parsing datetime string "aa" at position 0')
+        with tm.assertRaisesRegexp(ValueError, msg):
             f('M8[ns]')
 
     def test_equals_different_blocks(self):

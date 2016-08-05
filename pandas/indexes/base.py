@@ -15,7 +15,8 @@ from pandas.compat.numpy import function as nv
 from pandas import compat
 
 
-from pandas.types.generic import ABCSeries, ABCMultiIndex, ABCPeriodIndex
+from pandas.types.generic import (ABCSeries, ABCMultiIndex, ABCIndexClass,
+                                  ABCPeriodIndex)
 from pandas.types.missing import isnull, array_equivalent
 from pandas.types.common import (_ensure_int64,
                                  _ensure_object,
@@ -186,63 +187,36 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
                     return result
 
             if dtype is not None:
-                try:
 
-                    # we need to avoid having numpy coerce
-                    # things that look like ints/floats to ints unless
-                    # they are actually ints, e.g. '0' and 0.0
-                    # should not be coerced
-                    # GH 11836
-                    if is_integer_dtype(dtype):
-                        inferred = lib.infer_dtype(data)
-                        if inferred == 'integer':
-                            data = np.array(data, copy=copy, dtype=dtype)
-                        elif inferred in ['floating', 'mixed-integer-float']:
+                from pandas.types.cast import _possibly_cast_to_internal
+                data = _possibly_cast_to_internal(data, dtype)
 
-                            # if we are actually all equal to integers
-                            # then coerce to integer
-                            from .numeric import Int64Index, Float64Index
-                            try:
-                                res = data.astype('i8')
-                                if (res == data).all():
-                                    return Int64Index(res, copy=copy,
-                                                      name=name)
-                            except (TypeError, ValueError):
-                                pass
-
-                            # return an actual float index
-                            return Float64Index(data, copy=copy, dtype=dtype,
-                                                name=name)
-
-                        elif inferred == 'string':
-                            pass
-                        else:
-                            data = data.astype(dtype)
-                    elif is_float_dtype(dtype):
-                        inferred = lib.infer_dtype(data)
-                        if inferred == 'string':
-                            pass
-                        else:
-                            data = data.astype(dtype)
-                    else:
-                        data = np.array(data, dtype=dtype, copy=copy)
-
-                except (TypeError, ValueError):
-                    pass
+            # temp
+            # if len(data) == 0 and is_integer_dtype(dtype):
+            #     from pandas.indexes.range import RangeIndex
+            #     return RangeIndex(0, 0, name=name)
 
             # maybe coerce to a sub-class
-            from pandas.tseries.period import (PeriodIndex,
-                                               IncompatibleFrequency)
-            if isinstance(data, PeriodIndex):
-                return PeriodIndex(data, copy=copy, name=name, **kwargs)
-            if issubclass(data.dtype.type, np.integer):
+            if kwargs.get('tz', None) is not None:
+                from pandas.tseries.index import DatetimeIndex
+                return DatetimeIndex(data, copy=copy, name=name, **kwargs)
+
+            if isinstance(data, ABCIndexClass) and not is_object_dtype(data):
+                from pandas.indexes.range import RangeIndex
+                if isinstance(data, RangeIndex):
+                    return RangeIndex(len(data), name=name)
+                return data._shallow_copy(data, name=name)
+
+            elif issubclass(data.dtype.type, np.integer):
                 from .numeric import Int64Index
                 return Int64Index(data, copy=copy, dtype=dtype, name=name)
             elif issubclass(data.dtype.type, np.floating):
                 from .numeric import Float64Index
                 return Float64Index(data, copy=copy, dtype=dtype, name=name)
             elif issubclass(data.dtype.type, np.bool) or is_bool_dtype(data):
-                subarr = data.astype('object')
+                data = data.astype('object')
+                return cls._simple_new(data, name=name)
+
             else:
                 subarr = _asarray_tuplesafe(data, dtype=object)
 
@@ -252,38 +226,17 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
                 subarr = subarr.copy()
 
             if dtype is None:
-                inferred = lib.infer_dtype(subarr)
-                if inferred == 'integer':
-                    from .numeric import Int64Index
-                    return Int64Index(subarr.astype('i8'), copy=copy,
-                                      name=name)
-                elif inferred in ['floating', 'mixed-integer-float']:
-                    from .numeric import Float64Index
-                    return Float64Index(subarr, copy=copy, name=name)
-                elif inferred == 'boolean':
-                    # don't support boolean explicity ATM
+                from pandas.types.cast import _possibly_cast_to_internal
+                casted = _possibly_cast_to_internal(subarr)
+                if is_object_dtype(casted) or is_bool_dtype(casted):
                     pass
-                elif inferred != 'string':
-                    if inferred.startswith('datetime'):
-                        if (lib.is_datetime_with_singletz_array(subarr) or
-                                'tz' in kwargs):
-                            # only when subarr has the same tz
-                            from pandas.tseries.index import DatetimeIndex
-                            try:
-                                return DatetimeIndex(subarr, copy=copy,
-                                                     name=name, **kwargs)
-                            except tslib.OutOfBoundsDatetime:
-                                pass
+                elif isinstance(casted, ABCIndexClass):
+                    # coerced from object to others, already copied
+                    return Index(casted, name=name, copy=False, **kwargs)
+                else:
+                    return Index(casted, name=name, dtype=casted.dtype,
+                                 **kwargs)
 
-                    elif inferred.startswith('timedelta'):
-                        from pandas.tseries.tdi import TimedeltaIndex
-                        return TimedeltaIndex(subarr, copy=copy, name=name,
-                                              **kwargs)
-                    elif inferred == 'period':
-                        try:
-                            return PeriodIndex(subarr, name=name, **kwargs)
-                        except IncompatibleFrequency:
-                            pass
             return cls._simple_new(subarr, name)
 
         elif hasattr(data, '__array__'):
@@ -628,7 +581,11 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         ----------
         item : scalar item to coerce
         """
-        return Index([item], dtype=self.dtype, **self._get_attributes_dict())
+        try:
+            return Index([item], dtype=self.dtype,
+                         **self._get_attributes_dict())
+        except ValueError:
+            return Index([item], **self._get_attributes_dict())
 
     _index_shared_docs['copy'] = """
         Make a copy of this object.  Name and dtype sets those attributes on

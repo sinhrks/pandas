@@ -228,7 +228,6 @@ class Series(base.IndexOpsMixin, strings.StringAccessorMixin,
                 # handle sparse passed here (and force conversion)
                 if isinstance(data, ABCSparseArray):
                     data = data.to_dense()
-
             if index is None:
                 if not is_list_like(data):
                     data = [data]
@@ -2858,18 +2857,14 @@ def _sanitize_array(data, index, dtype=None, copy=False,
         if take_fast_path:
             if _possibly_castable(arr) and not copy and dtype is None:
                 return arr
-
+        from pandas.types.cast import _possibly_cast_to_internal
         try:
             subarr = _possibly_cast_to_datetime(arr, dtype)
+
             if not is_extension_type(subarr):
                 subarr = np.array(subarr, dtype=dtype, copy=copy)
         except (ValueError, TypeError):
-            if is_categorical_dtype(dtype):
-                subarr = Categorical(arr)
-            elif dtype is not None and raise_cast_failure:
-                raise
-            else:
-                subarr = np.array(arr, dtype=object, copy=copy)
+            subarr = _possibly_cast_to_internal(arr, dtype, copy=copy)
         return subarr
 
     # GH #846
@@ -2907,6 +2902,9 @@ def _sanitize_array(data, index, dtype=None, copy=False,
 
     elif isinstance(data, (list, tuple)) and len(data) > 0:
         if dtype is not None:
+            data = np.array(data, dtype=object, copy=False)
+            subarr = _try_cast(data, False)
+            """
             try:
                 subarr = _try_cast(data, False)
             except Exception:
@@ -2914,6 +2912,7 @@ def _sanitize_array(data, index, dtype=None, copy=False,
                     raise
                 subarr = np.array(data, dtype=object, copy=copy)
                 subarr = lib.maybe_convert_objects(subarr)
+            """
 
         else:
             subarr = _possibly_convert_platform(data)
