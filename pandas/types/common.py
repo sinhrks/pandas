@@ -3,11 +3,11 @@
 import numpy as np
 from pandas.compat import string_types, text_type, binary_type
 from pandas import lib, algos
-from .dtypes import (CategoricalDtype, CategoricalDtypeType,
+from .dtypes import (CategoricalDtype, CategoricalDtypeType, StringDtype,
                      DatetimeTZDtype, DatetimeTZDtypeType,
                      PeriodDtype, PeriodDtypeType,
                      ExtensionDtype)
-from .generic import (ABCCategorical, ABCPeriodIndex,
+from .generic import (ABCCategorical, ABCString, ABCPeriodIndex,
                       ABCDatetimeIndex, ABCSeries,
                       ABCSparseArray, ABCSparseSeries)
 from .inference import is_string_like
@@ -57,6 +57,11 @@ def is_categorical(array):
     return isinstance(array, ABCCategorical) or is_categorical_dtype(array)
 
 
+def is_string(array):
+    """ return if we are a string possibility """
+    return isinstance(array, ABCString) or is_pandas_string_dtype(array)
+
+
 def is_datetimetz(array):
     """ return if we are a datetime with tz array """
     return ((isinstance(array, ABCDatetimeIndex) and
@@ -92,6 +97,10 @@ def is_period_dtype(arr_or_dtype):
 
 def is_categorical_dtype(arr_or_dtype):
     return CategoricalDtype.is_dtype(arr_or_dtype)
+
+
+def is_pandas_string_dtype(arr_or_dtype):
+    return StringDtype.is_dtype(arr_or_dtype)
 
 
 def is_string_dtype(arr_or_dtype):
@@ -281,6 +290,8 @@ def is_extension_type(value):
     these are internal klasses that we represent (and don't use a np.array)
     """
     if is_categorical(value):
+        return True
+    elif is_string(value):
         return True
     elif is_sparse(value):
         return True

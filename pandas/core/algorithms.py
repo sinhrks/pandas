@@ -18,7 +18,7 @@ from pandas.types.common import (is_integer_dtype,
                                  is_period_arraylike,
                                  is_float_dtype,
                                  needs_i8_conversion,
-                                 is_categorical,
+                                 is_categorical, is_string,
                                  is_datetime64_dtype,
                                  is_timedelta64_dtype,
                                  is_scalar,
@@ -1007,7 +1007,7 @@ def take_nd(arr, indexer, axis=0, out=None, fill_value=np.nan, mask_info=None,
     """
 
     # dispatch to internal type takes
-    if is_categorical(arr):
+    if is_categorical(arr) or is_string(arr):
         return arr.take_nd(indexer, fill_value=fill_value,
                            allow_fill=allow_fill)
     elif is_datetimetz(arr):

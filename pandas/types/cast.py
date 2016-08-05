@@ -299,9 +299,8 @@ def _maybe_promote(dtype, fill_value=np.nan):
         dtype = np.object_
 
     # in case we have a string that looked like a number
-    if is_categorical_dtype(dtype):
-        pass
-    elif is_datetimetz(dtype):
+    print(dtype)
+    if is_extension_type(dtype):
         pass
     elif issubclass(np.dtype(dtype).type, string_types):
         dtype = np.object_

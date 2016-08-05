@@ -2928,6 +2928,13 @@ def _sanitize_array(data, index, dtype=None, copy=False,
     if issubclass(subarr.dtype.type, compat.string_types):
         subarr = np.array(data, dtype=object, copy=copy)
 
+    # temp
+    if len(subarr) > 0 and all(isinstance(v, (compat.string_types,
+                                              compat.binary_type))
+                               for v in subarr[notnull(subarr)]):
+        from pandas.core.strings import String
+        subarr = String(subarr)
+
     return subarr
 
 

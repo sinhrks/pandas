@@ -6,12 +6,14 @@ from pandas import lib
 from pandas.tslib import NaT, iNaT
 from .generic import (ABCMultiIndex, ABCSeries,
                       ABCIndexClass, ABCGeneric)
-from .common import (is_string_dtype, is_datetimelike,
+from .common import (is_datetimelike,
                      is_datetimelike_v_numeric, is_float_dtype,
                      is_datetime64_dtype, is_datetime64tz_dtype,
                      is_timedelta64_dtype,
                      is_complex_dtype, is_categorical_dtype,
-                     is_string_like_dtype, is_bool_dtype,
+                     is_string_dtype, is_string_like_dtype,
+                     is_pandas_string_dtype,
+                     is_bool_dtype,
                      is_integer_dtype, is_dtype_equal,
                      needs_i8_conversion, _ensure_object,
                      pandas_dtype,
@@ -122,7 +124,9 @@ def _isnull_ndarraylike(obj):
     values = getattr(obj, 'values', obj)
     dtype = values.dtype
 
-    if is_string_dtype(dtype):
+    if is_pandas_string_dtype(dtype):
+        result = values.isnull()
+    elif is_string_dtype(dtype):
         if is_categorical_dtype(values):
             from pandas import Categorical
             if not isinstance(values, Categorical):

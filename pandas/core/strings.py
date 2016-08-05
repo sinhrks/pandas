@@ -1,18 +1,19 @@
 import numpy as np
 
 from pandas.compat import zip
-from pandas.types.generic import ABCSeries, ABCIndex
+from pandas.types.dtypes import StringDtype
+from pandas.types.generic import ABCSeries, ABCIndex, ABCIndexClass
 from pandas.types.missing import isnull, notnull
-from pandas.types.common import (is_bool_dtype,
-                                 is_categorical_dtype,
+from pandas.types.common import (is_bool_dtype, is_integer_dtype,
+                                 is_categorical_dtype, is_pandas_string_dtype,
                                  is_object_dtype,
                                  is_string_like,
                                  is_list_like,
                                  is_scalar,
                                  is_integer)
 from pandas.core.common import _values_from_object
-
-from pandas.core.algorithms import take_1d
+from pandas.core.algorithms import factorize, take_1d
+from pandas.core.categorical import Categorical, _get_codes_for_values
 import pandas.compat as compat
 from pandas.core.base import AccessorProperty, NoNewAttributesMixin
 from pandas.util.decorators import Appender
@@ -1249,7 +1250,7 @@ def str_encode(arr, encoding, errors="strict"):
 
 def _noarg_wrapper(f, docstring=None, **kargs):
     def wrapper(self):
-        result = _na_map(f, self._data, **kargs)
+        result = self._strdata._map(f, **kargs)
         return self._wrap_result(result)
 
     wrapper.__name__ = f.__name__
@@ -1294,6 +1295,355 @@ def copy(source):
     return do_copy
 
 
+_ALLOWED_TYPES = ('string', 'uniocode', 'bytes', 'empty')
+
+
+class String(Categorical):
+
+    _typ = 'string'
+    dtype = StringDtype()
+
+    def __init__(self, values, categories=None, ordered=None,
+                 fastpath=False):
+
+        if isinstance(values, String):
+            super(String, self).__init__(values._codes,
+                                         categoriels=values._categories,
+                                         ordered=True, fastpath=True)
+            return
+        elif isinstance(values, Categorical):
+            if values._categories.inferred_type in _ALLOWED_TYPES:
+                # ToDo: sort
+                super(String, self).__init__(values._codes,
+                                             categories=values._categories,
+                                             ordered=True)
+                return
+            else:
+                raise ValueError('all values must be str')
+
+        from pandas.indexes.base import Index
+        if not isinstance(values, ABCIndexClass):
+            values = Index(values, dtype=object)
+
+        if not values.dropna().inferred_type in _ALLOWED_TYPES:
+            raise ValueError('all values must be str')
+
+        # categories = values.dropna()
+        # codes = _get_codes_for_values(values, categories)
+        # print(codes, categories)
+        # ToDO: use fastpath
+        super(String, self).__init__(values, ordered=True, fastpath=False)
+        # Temp
+        self._categories = self._categories.sort_values()
+
+    def _get_repr(self, length=True, na_rep='NaN', footer=True):
+        from pandas.formats import format as fmt
+        formatter = fmt.StringFormatter(self, length=length,
+                                        na_rep=na_rep, footer=footer)
+        result = formatter.to_string()
+        return compat.text_type(result)
+
+    def _wrap_result(self, result):
+        new_values = take_1d(result, self._codes, fill_value=np.nan)
+
+        # ToDo:
+        from pandas import Index
+        if Index(result).inferred_type in _ALLOWED_TYPES:
+            return String(new_values)
+        else:
+            return new_values
+
+    def _map(self, mapper, **kwargs):
+        new_categories = _na_map(mapper, self.categories, **kwargs)
+        mask = self._codes == -1
+        try:
+            # ToDo: cythonize this
+
+            new_values = np.take(new_categories, self._codes)
+            np.putmask(new_values, mask, np.nan)
+            # new_values[mask] = np.nan
+            return String(new_values)
+        except ValueError:
+            new_values = np.take(new_categories, self._codes)
+
+            # ToDo: temp, to store NaN
+            if is_bool_dtype(new_values) and mask.any():
+                new_values = new_values.astype(object)
+            elif is_integer_dtype(new_values) and mask.any():
+                new_values = new_values.astype(float)
+            new_values[mask] = np.nan
+            return new_values
+
+    """
+    - cat(self, others=None, sep=None, na_rep=None):
+    - split(self, pat=None, n=-1, expand=False):
+    - rsplit(self, pat=None, n=-1, expand=False):
+    - partition(self, pat=' ', expand=True):
+    - rpartition(self, pat=' ', expand=True):
+    - get(self, i):
+    - join(self, sep):
+    - contains(self, pat, case=True, flags=0, na=np.nan, regex=True):
+    - match(self, pat, case=True, flags=0, na=np.nan, as_indexer=False):
+    - replace(self, pat, repl, n=-1, case=True, flags=0):
+    - repeat(self, repeats):
+    """
+
+    @copy(str_pad)
+    def pad(self, width, side='left', fillchar=' '):
+        result = str_pad(self._categories, width=width,
+                         side=side, fillchar=fillchar)
+        return self._wrap_result(result)
+
+    _shared_docs['str_pad'] = ("""
+    Filling %(side)s side of strings in the Series/Index with an
+    additional character. Equivalent to :meth:`str.%(method)s`.
+
+    Parameters
+    ----------
+    width : int
+        Minimum width of resulting string; additional characters will be filled
+        with ``fillchar``
+    fillchar : str
+        Additional character for filling, default is whitespace
+
+    Returns
+    -------
+    filled : Series/Index of objects
+    """)
+
+    @Appender(_shared_docs['str_pad'] % dict(side='left and right',
+                                             method='center'))
+    def center(self, width, fillchar=' '):
+        return self.pad(width, side='both', fillchar=fillchar)
+
+    @Appender(_shared_docs['str_pad'] % dict(side='right', method='ljust'))
+    def ljust(self, width, fillchar=' '):
+        return self.pad(width, side='right', fillchar=fillchar)
+
+    @Appender(_shared_docs['str_pad'] % dict(side='left', method='rjust'))
+    def rjust(self, width, fillchar=' '):
+        return self.pad(width, side='left', fillchar=fillchar)
+
+    def zfill(self, width):
+        """
+        Filling left side of strings in the Series/Index with 0.
+        Equivalent to :meth:`str.zfill`.
+
+        Parameters
+        ----------
+        width : int
+            Minimum width of resulting string; additional characters will be
+            filled with 0
+
+        Returns
+        -------
+        filled : Series/Index of objects
+        """
+        return self.pad(width, side='left', fillchar='0')
+
+
+    @copy(str_slice)
+    def slice(self, start=None, stop=None, step=None):
+        result = str_slice(self._categories, start, stop, step)
+        return self._wrap_result(result)
+
+    @copy(str_slice_replace)
+    def slice_replace(self, start=None, stop=None, repl=None):
+        result = str_slice_replace(self._categories, start, stop, repl)
+        return self._wrap_result(result)
+
+    @copy(str_decode)
+    def decode(self, encoding, errors="strict"):
+        result = str_decode(self._categories.values, encoding, errors)
+        return self._wrap_result(result)
+
+    @copy(str_encode)
+    def encode(self, encoding, errors="strict"):
+        result = str_encode(self._categories.values, encoding, errors)
+        return self._wrap_result(result)
+
+    _shared_docs['str_strip'] = ("""
+    Strip whitespace (including newlines) from each string in the
+    Series/Index from %(side)s. Equivalent to :meth:`str.%(method)s`.
+
+    Returns
+    -------
+    stripped : Series/Index of objects
+    """)
+
+    @Appender(_shared_docs['str_strip'] % dict(side='left and right sides',
+                                               method='strip'))
+    def strip(self, to_strip=None):
+        result = str_strip(self._categories, to_strip, side='both')
+        return self._wrap_result(result)
+
+    @Appender(_shared_docs['str_strip'] % dict(side='left side',
+                                               method='lstrip'))
+    def lstrip(self, to_strip=None):
+        result = str_strip(self._categories, to_strip, side='left')
+        return self._wrap_result(result)
+
+    @Appender(_shared_docs['str_strip'] % dict(side='right side',
+                                               method='rstrip'))
+    def rstrip(self, to_strip=None):
+        result = str_strip(self._categories, to_strip, side='right')
+        return self._wrap_result(result)
+
+    """
+    - wrap(self, width, **kwargs):
+    - get_dummies(self, sep='|'):
+    - translate(self, table, deletechars=None):
+    - count = _pat_wrapper(str_count, flags=True)
+    - startswith = _pat_wrapper(str_startswith, na=True)
+    - endswith = _pat_wrapper(str_endswith, na=True)
+    - findall = _pat_wrapper(str_findall, flags=True)
+    - extract(self, pat, flags=0, expand=None):
+    - extractall(self, pat, flags=0):
+    - find(self, sub, start=0, end=None):
+    - rfind(self, sub, start=0, end=None):
+    - normalize(self, form):
+    """
+
+    _shared_docs['index'] = ("""
+    Return %(side)s indexes in each strings where the substring is
+    fully contained between [start:end]. This is the same as
+    ``str.%(similar)s`` except instead of returning -1, it raises a ValueError
+    when the substring is not found. Equivalent to standard ``str.%(method)s``.
+
+    Parameters
+    ----------
+    sub : str
+        Substring being searched
+    start : int
+        Left edge index
+    end : int
+        Right edge index
+
+    Returns
+    -------
+    found : Series/Index of objects
+
+    See Also
+    --------
+    %(also)s
+    """)
+
+    @Appender(_shared_docs['index'] %
+              dict(side='lowest', similar='find', method='index',
+                   also='rindex : Return highest indexes in each strings'))
+    def index(self, sub, start=0, end=None):
+        result = str_index(self._categories, sub, start=start,
+                           end=end, side='left')
+        return self._wrap_result(result)
+
+    @Appender(_shared_docs['index'] %
+              dict(side='highest', similar='rfind', method='rindex',
+                   also='index : Return lowest indexes in each strings'))
+    def rindex(self, sub, start=0, end=None):
+        result = str_index(self._categories, sub, start=start, end=end, side='right')
+        return self._wrap_result(result)
+
+    _shared_docs['len'] = ("""
+    Compute length of each string in the Series/Index.
+
+    Returns
+    -------
+    lengths : Series/Index of integer values
+    """)
+    @Appender(_shared_docs['len'])
+    def len(self):
+        return self._map(lambda x: len(x), dtype=np.int64)
+
+    _shared_docs['casemethods'] = ("""
+    Convert strings in the Series/Index to %(type)s.
+    Equivalent to :meth:`str.%(method)s`.
+
+    Returns
+    -------
+    converted : Series/Index of objects
+    """)
+    _shared_docs['lower'] = dict(type='lowercase', method='lower')
+    _shared_docs['upper'] = dict(type='uppercase', method='upper')
+    _shared_docs['title'] = dict(type='titlecase', method='title')
+    _shared_docs['capitalize'] = dict(type='be capitalized',
+                                      method='capitalize')
+    _shared_docs['swapcase'] = dict(type='be swapcased', method='swapcase')
+
+    @Appender(_shared_docs['casemethods'] % _shared_docs['lower'])
+    def lower(self):
+        return self._map(lambda x: x.lower())
+
+    @Appender(_shared_docs['casemethods'] % _shared_docs['upper'])
+    def upper(self):
+        return self._map(lambda x: x.upper())
+
+    @Appender(_shared_docs['casemethods'] % _shared_docs['title'])
+    def title(self):
+        return self._map(lambda x: x.title())
+
+    @Appender(_shared_docs['casemethods'] % _shared_docs['capitalize'])
+    def capitalize(self):
+        return self._map(lambda x: x.capitalize())
+
+    @Appender(_shared_docs['casemethods'] % _shared_docs['swapcase'])
+    def swapcase(self):
+        return self._map(lambda x: x.swapcase())
+
+    _shared_docs['ismethods'] = ("""
+    Check whether all characters in each string in the Series/Index
+    are %(type)s. Equivalent to :meth:`str.%(method)s`.
+
+    Returns
+    -------
+    is : Series/array of boolean values
+    """)
+    _shared_docs['isalnum'] = dict(type='alphanumeric', method='isalnum')
+    _shared_docs['isalpha'] = dict(type='alphabetic', method='isalpha')
+    _shared_docs['isdigit'] = dict(type='digits', method='isdigit')
+    _shared_docs['isspace'] = dict(type='whitespace', method='isspace')
+    _shared_docs['islower'] = dict(type='lowercase', method='islower')
+    _shared_docs['isupper'] = dict(type='uppercase', method='isupper')
+    _shared_docs['istitle'] = dict(type='titlecase', method='istitle')
+    _shared_docs['isnumeric'] = dict(type='numeric', method='isnumeric')
+    _shared_docs['isdecimal'] = dict(type='decimal', method='isdecimal')
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isalnum'])
+    def isalnum(self):
+        return self._map(lambda x: x.isalnum(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isalpha'])
+    def isalpha(self):
+        return self._map(lambda x: x.isalpha(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isdigit'])
+    def isdigit(self):
+        return self._map(lambda x: x.isdigit(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isspace'])
+    def isspace(self):
+        return self._map(lambda x: x.isspace(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['islower'])
+    def islower(self):
+        return self._map(lambda x: x.islower(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isupper'])
+    def isupper(self):
+        return self._map(lambda x: x.isupper(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['istitle'])
+    def istitle(self):
+        return self._map(lambda x: x.istitle(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isnumeric'])
+    def isnumeric(self):
+        return self._map(lambda x: compat.u_safe(x).isnumeric(), dtype=np.bool)
+
+    @Appender(_shared_docs['ismethods'] % _shared_docs['isdecimal'])
+    def isdecimal(self):
+        return self._map(lambda x: compat.u_safe(x).isdecimal(), dtype=np.bool)
+
+
 class StringMethods(NoNewAttributesMixin):
     """
     Vectorized string functions for Series and Index. NAs stay NA unless
@@ -1307,9 +1657,28 @@ class StringMethods(NoNewAttributesMixin):
     """
 
     def __init__(self, data):
+        self._is_series = isinstance(data, ABCSeries)
         self._is_categorical = is_categorical_dtype(data)
+
         self._data = data.cat.categories if self._is_categorical else data
-        # save orig to blow up categoricals to the right type
+
+        #Temp
+        from pandas import Index, Series
+        if Index(data).dropna().inferred_type not in _ALLOWED_TYPES:
+            # ToDo: warn
+            warnings.warn('all values must be str', UserWarning)
+            values = np.array([v if isinstance(v, (compat.string_types,
+                                                   compat.binary_type))
+                               else np.nan for v in data], dtype=object)
+            if self._is_series:
+                data = Series(values, index=data.index, name=data.name)
+            else:
+                data = Index(values, name=data.name)
+            print(data)
+        self._strdata = String(data)
+        # self._categories = self._data._categories
+        # self._codes = self._data._codes
+
         self._orig = data
         self._freeze()
 
@@ -1331,14 +1700,6 @@ class StringMethods(NoNewAttributesMixin):
                      name=None, expand=None):
 
         from pandas.core.index import Index, MultiIndex
-
-        # for category, we do the stuff on the categories, so blow it up
-        # to the full series again
-        # But for some operations, we have to do the stuff on the full values,
-        # so make it possible to skip this step as the method already did this
-        # before the transformation...
-        if use_codes and self._is_categorical:
-            result = take_1d(result, self._orig.cat.codes)
 
         if not hasattr(result, 'ndim') or not hasattr(result, 'dtype'):
             return result
@@ -1513,25 +1874,8 @@ class StringMethods(NoNewAttributesMixin):
 
     @copy(str_pad)
     def pad(self, width, side='left', fillchar=' '):
-        result = str_pad(self._data, width, side=side, fillchar=fillchar)
+        result = self._strdata.pad(width, side=side, fillchar=fillchar)
         return self._wrap_result(result)
-
-    _shared_docs['str_pad'] = ("""
-    Filling %(side)s side of strings in the Series/Index with an
-    additional character. Equivalent to :meth:`str.%(method)s`.
-
-    Parameters
-    ----------
-    width : int
-        Minimum width of resulting string; additional characters will be filled
-        with ``fillchar``
-    fillchar : str
-        Additional character for filling, default is whitespace
-
-    Returns
-    -------
-    filled : Series/Index of objects
-    """)
 
     @Appender(_shared_docs['str_pad'] % dict(side='left and right',
                                              method='center'))
@@ -1561,12 +1905,12 @@ class StringMethods(NoNewAttributesMixin):
         -------
         filled : Series/Index of objects
         """
-        result = str_pad(self._data, width, side='left', fillchar='0')
+        result = self._strdata.zfill(width)
         return self._wrap_result(result)
 
     @copy(str_slice)
     def slice(self, start=None, stop=None, step=None):
-        result = str_slice(self._data, start, stop, step)
+        result = self._strdata.slice(start, stop, step)
         return self._wrap_result(result)
 
     @copy(str_slice_replace)
@@ -1576,39 +1920,30 @@ class StringMethods(NoNewAttributesMixin):
 
     @copy(str_decode)
     def decode(self, encoding, errors="strict"):
-        result = str_decode(self._data, encoding, errors)
+        result = self._strdata.decode(encoding, errors)
         return self._wrap_result(result)
 
     @copy(str_encode)
     def encode(self, encoding, errors="strict"):
-        result = str_encode(self._data, encoding, errors)
+        result = self._strdata.encode(encoding, errors)
         return self._wrap_result(result)
-
-    _shared_docs['str_strip'] = ("""
-    Strip whitespace (including newlines) from each string in the
-    Series/Index from %(side)s. Equivalent to :meth:`str.%(method)s`.
-
-    Returns
-    -------
-    stripped : Series/Index of objects
-    """)
 
     @Appender(_shared_docs['str_strip'] % dict(side='left and right sides',
                                                method='strip'))
     def strip(self, to_strip=None):
-        result = str_strip(self._data, to_strip, side='both')
+        result = self._strdata.strip(to_strip)
         return self._wrap_result(result)
 
     @Appender(_shared_docs['str_strip'] % dict(side='left side',
                                                method='lstrip'))
     def lstrip(self, to_strip=None):
-        result = str_strip(self._data, to_strip, side='left')
+        result = self._strdata.lstrip(to_strip)
         return self._wrap_result(result)
 
     @Appender(_shared_docs['str_strip'] % dict(side='right side',
                                                method='rstrip'))
     def rstrip(self, to_strip=None):
-        result = str_strip(self._data, to_strip, side='right')
+        result = self._strdata.rstrip(to_strip)
         return self._wrap_result(result)
 
     @copy(str_wrap)
@@ -1699,67 +2034,22 @@ class StringMethods(NoNewAttributesMixin):
         result = _na_map(f, self._data)
         return self._wrap_result(result)
 
-    _shared_docs['index'] = ("""
-    Return %(side)s indexes in each strings where the substring is
-    fully contained between [start:end]. This is the same as
-    ``str.%(similar)s`` except instead of returning -1, it raises a ValueError
-    when the substring is not found. Equivalent to standard ``str.%(method)s``.
-
-    Parameters
-    ----------
-    sub : str
-        Substring being searched
-    start : int
-        Left edge index
-    end : int
-        Right edge index
-
-    Returns
-    -------
-    found : Series/Index of objects
-
-    See Also
-    --------
-    %(also)s
-    """)
-
     @Appender(_shared_docs['index'] %
               dict(side='lowest', similar='find', method='index',
                    also='rindex : Return highest indexes in each strings'))
     def index(self, sub, start=0, end=None):
-        result = str_index(self._data, sub, start=start, end=end, side='left')
+        result = self._strdata.index(sub, start=start, end=end)
         return self._wrap_result(result)
 
     @Appender(_shared_docs['index'] %
               dict(side='highest', similar='rfind', method='rindex',
                    also='index : Return lowest indexes in each strings'))
     def rindex(self, sub, start=0, end=None):
-        result = str_index(self._data, sub, start=start, end=end, side='right')
+        result = self._strdata.rindex(sub, start=start, end=end)
         return self._wrap_result(result)
 
-    _shared_docs['len'] = ("""
-    Compute length of each string in the Series/Index.
-
-    Returns
-    -------
-    lengths : Series/Index of integer values
-    """)
     len = _noarg_wrapper(len, docstring=_shared_docs['len'], dtype=int)
-
-    _shared_docs['casemethods'] = ("""
-    Convert strings in the Series/Index to %(type)s.
-    Equivalent to :meth:`str.%(method)s`.
-
-    Returns
-    -------
-    converted : Series/Index of objects
-    """)
-    _shared_docs['lower'] = dict(type='lowercase', method='lower')
-    _shared_docs['upper'] = dict(type='uppercase', method='upper')
-    _shared_docs['title'] = dict(type='titlecase', method='title')
-    _shared_docs['capitalize'] = dict(type='be capitalized',
-                                      method='capitalize')
-    _shared_docs['swapcase'] = dict(type='be swapcased', method='swapcase')
+    # ToDo: use String.xxx
     lower = _noarg_wrapper(lambda x: x.lower(),
                            docstring=_shared_docs['casemethods'] %
                            _shared_docs['lower'])
@@ -1775,24 +2065,6 @@ class StringMethods(NoNewAttributesMixin):
     swapcase = _noarg_wrapper(lambda x: x.swapcase(),
                               docstring=_shared_docs['casemethods'] %
                               _shared_docs['swapcase'])
-
-    _shared_docs['ismethods'] = ("""
-    Check whether all characters in each string in the Series/Index
-    are %(type)s. Equivalent to :meth:`str.%(method)s`.
-
-    Returns
-    -------
-    is : Series/array of boolean values
-    """)
-    _shared_docs['isalnum'] = dict(type='alphanumeric', method='isalnum')
-    _shared_docs['isalpha'] = dict(type='alphabetic', method='isalpha')
-    _shared_docs['isdigit'] = dict(type='digits', method='isdigit')
-    _shared_docs['isspace'] = dict(type='whitespace', method='isspace')
-    _shared_docs['islower'] = dict(type='lowercase', method='islower')
-    _shared_docs['isupper'] = dict(type='uppercase', method='isupper')
-    _shared_docs['istitle'] = dict(type='titlecase', method='istitle')
-    _shared_docs['isnumeric'] = dict(type='numeric', method='isnumeric')
-    _shared_docs['isdecimal'] = dict(type='decimal', method='isdecimal')
     isalnum = _noarg_wrapper(lambda x: x.isalnum(),
                              docstring=_shared_docs['ismethods'] %
                              _shared_docs['isalnum'])
@@ -1830,7 +2102,8 @@ class StringAccessorMixin(object):
         from pandas.core.index import Index
 
         if (isinstance(self, ABCSeries) and
-                not ((is_categorical_dtype(self.dtype) and
+                not (is_pandas_string_dtype(self.dtype) or
+                     (is_categorical_dtype(self.dtype) and
                       is_object_dtype(self.values.categories)) or
                      (is_object_dtype(self.dtype)))):
             # it's neither a string series not a categorical series with

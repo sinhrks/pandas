@@ -11,7 +11,7 @@ from distutils.version import LooseVersion
 import sys
 
 from pandas.types.missing import isnull, notnull
-from pandas.types.common import (is_categorical_dtype,
+from pandas.types.common import (is_categorical_dtype, is_pandas_string_dtype,
                                  is_float_dtype,
                                  is_period_arraylike,
                                  is_integer_dtype,
@@ -141,6 +141,59 @@ class CategoricalFormatter(object):
         return compat.text_type(u('\n').join(result))
 
 
+class StringFormatter(object):
+    def __init__(self, categorical, buf=None, length=True, na_rep='NaN',
+                 footer=True):
+        self.categorical = categorical
+        self.buf = buf if buf is not None else StringIO(u(""))
+        self.na_rep = na_rep
+        self.length = length
+        self.footer = footer
+
+    def _get_footer(self):
+        footer = ''
+
+        if self.length:
+            if footer:
+                footer += ', '
+            footer += "Length: %d" % len(self.categorical)
+
+        level_info = self.categorical._repr_categories_info()
+
+        # Levels are added in a newline
+        if footer:
+            footer += '\n'
+        footer += level_info
+
+        return compat.text_type(footer)
+
+    def _get_formatted_values(self):
+        return format_array(self.categorical.get_values(), None,
+                            float_format=None, na_rep=self.na_rep)
+
+    def to_string(self):
+        categorical = self.categorical
+
+        if len(categorical) == 0:
+            if self.footer:
+                return self._get_footer()
+            else:
+                return u('')
+
+        fmt_values = self._get_formatted_values()
+
+        result = ['%s' % i for i in fmt_values]
+        result = [i.strip() for i in result]
+        result = u(', ').join(result)
+        result = [u('[') + result + u(']')]
+        if self.footer:
+            footer = self._get_footer()
+            if footer:
+                result.append(footer)
+
+        return compat.text_type(u('\n').join(result))
+
+
 class SeriesFormatter(object):
     def __init__(self, series, buf=None, length=True, header=True, index=True,
                  na_rep='NaN', name=False, float_format=None, dtype=True,
@@ -213,6 +266,8 @@ class SeriesFormatter(object):
             if footer:
                 footer += "\n"
             footer += level_info
+
+
 
         return compat.text_type(footer)
 
@@ -1900,6 +1955,8 @@ def format_array(values, formatter, float_format=None, na_rep='NaN',
 
     if is_categorical_dtype(values):
         fmt_klass = CategoricalArrayFormatter
+    elif is_pandas_string_dtype(values):
+        fmt_klass = StringArrayFormatter
     elif is_float_dtype(values.dtype):
         fmt_klass = FloatArrayFormatter
     elif is_period_arraylike(values):
@@ -2179,6 +2236,18 @@ class PeriodArrayFormatter(IntArrayFormatter):
 
 
 class CategoricalArrayFormatter(GenericArrayFormatter):
+    def __init__(self, values, *args, **kwargs):
+        GenericArrayFormatter.__init__(self, values, *args, **kwargs)
+
+    def _format_strings(self):
+        fmt_values = format_array(self.values.get_values(), self.formatter,
+                                  float_format=self.float_format,
+                                  na_rep=self.na_rep, digits=self.digits,
+                                  space=self.space, justify=self.justify)
+        return fmt_values
+
+
+class StringArrayFormatter(GenericArrayFormatter):
     def __init__(self, values, *args, **kwargs):
         GenericArrayFormatter.__init__(self, values, *args, **kwargs)
 

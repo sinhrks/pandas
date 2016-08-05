@@ -14,10 +14,371 @@ from pandas.compat import range, u
 import pandas.compat as compat
 from pandas import (Index, Series, DataFrame, isnull, MultiIndex, notnull)
 
-from pandas.util.testing import assert_series_equal
 import pandas.util.testing as tm
 
+from pandas.core.strings import String
 import pandas.core.strings as strings
+
+
+class TestStringClass(tm.TestCase):
+
+    _multiprocess_can_split_ = True
+
+    def test_constructor(self):
+        s = String(['A', 'B', 'C'])
+        tm.assert_index_equal(s.categories, Index(['A', 'B', 'C']))
+        tm.assert_numpy_array_equal(s.codes,
+                                    np.array([0, 1, 2], dtype=np.int8))
+        self.assertTrue(s.ordered, True)
+
+        s = String(['D', 'B', 'A', 'A'])
+        tm.assert_index_equal(s.categories, Index(['A', 'B', 'D']))
+        tm.assert_numpy_array_equal(s.codes,
+                                    np.array([2, 1, 0, 0], dtype=np.int8))
+        self.assertTrue(s.ordered, True)
+
+        msg = 'all values must be str'
+        with tm.assertRaisesRegexp(ValueError, msg):
+            String(['A', 'B', 3])
+
+    def test_pad(self):
+        s = String(['a', 'b', NA, 'c', NA, 'eeeeee'])
+
+        result = s.pad(5, side='left')
+        exp = String(['    a', '    b', NA, '    c', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.pad(5, side='right')
+        exp = String(['a    ', 'b    ', NA, 'c    ', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.pad(5, side='both')
+        exp = String(['  a  ', '  b  ', NA, '  c  ', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        # unicode
+        s = String([u'a', u'b', NA, u'c', NA, u'eeeeee'])
+
+        result = s.pad(5, side='left')
+        exp = String([u'    a', u'    b', NA, u'    c', NA, u'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.pad(5, side='right')
+        exp = String([u'a    ', u'b    ', NA, u'c    ', NA, u'eeeeee'])
+        tm.assert_almost_equal(result, exp)
+
+        result = s.pad(5, side='both')
+        exp = String([u'  a  ', u'  b  ', NA, u'  c  ', NA, u'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+    def test_pad_fillchar(self):
+        s = String(['a', 'b', NA, 'c', NA, 'eeeeee'])
+
+        result = s.pad(5, side='left', fillchar='X')
+        exp = String(['XXXXa', 'XXXXb', NA, 'XXXXc', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.pad(5, side='right', fillchar='X')
+        exp = String(['aXXXX', 'bXXXX', NA, 'cXXXX', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.pad(5, side='both', fillchar='X')
+        exp = String(['XXaXX', 'XXbXX', NA, 'XXcXX', NA, 'eeeeee'])
+        tm.assert_string_equal(result, exp)
+
+        with tm.assertRaisesRegexp(TypeError,
+                                   "fillchar must be a character, not str"):
+            s.pad(5, fillchar='XY')
+
+        with tm.assertRaisesRegexp(TypeError,
+                                   "fillchar must be a character, not int"):
+            s.pad(5, fillchar=5)
+
+    def test_pad_width(self):
+        # GH 13598
+        s = String(['1', '22', 'a', 'bb'])
+
+        for f in ['center', 'ljust', 'rjust', 'zfill', 'pad']:
+            with tm.assertRaisesRegexp(TypeError,
+                                       "width must be of integer type, not*"):
+                getattr(s, f)('f')
+
+    def test_slice(self):
+        s = String(['aafootwo', 'aabartwo', NA, 'aabazqux'])
+        result = s.slice(2, 5)
+        exp = String(['foo', 'bar', NA, 'baz'])
+        tm.assert_string_equal(result, exp)
+
+        for start, stop, step in [(0, 3, -1), (None, None, -1), (3, 10, 2),
+                                  (3, 0, -1)]:
+            result = s.slice(start, stop, step)
+            expected = String([v[start:stop:step] if not isnull(v) else NA
+                               for v in s.get_values()])
+            tm.assert_string_equal(result, expected)
+
+        # unicode
+        s = String([u'aafootwo', u'aabartwo', NA, u'aabazqux'])
+
+        result = s.slice(2, 5)
+        exp = String([u'foo', u'bar', NA, u'baz'])
+        tm.assert_string_equal(result, exp)
+
+        result = s.slice(0, -1, 2)
+        exp = String([u'afow', u'abrw', NA, u'abzu'])
+        tm.assert_string_equal(result, exp)
+
+    def test_slice_replace(self):
+        s = String(['short', 'a bit longer', 'evenlongerthanthat', '', NA])
+        exp = String(['shrt', 'a it longer', 'evnlongerthanthat', '', NA])
+        result = s.slice_replace(2, 3)
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['shzrt', 'a zit longer', 'evznlongerthanthat', 'z', NA])
+        result = s.slice_replace(2, 3, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['shzort', 'a zbit longer', 'evzenlongerthanthat',
+                      'z', NA])
+        result = s.slice_replace(2, 2, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['shzort', 'a zbit longer', 'evzenlongerthanthat',
+                      'z', NA])
+        result = s.slice_replace(2, 1, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['shorz', 'a bit longez', 'evenlongerthanthaz', 'z', NA])
+        result = s.slice_replace(-1, None, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['zrt', 'zer', 'zat', 'z', NA])
+        result = s.slice_replace(None, -2, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['shortz', 'a bit znger', 'evenlozerthanthat', 'z', NA])
+        result = s.slice_replace(6, 8, 'z')
+        tm.assert_string_equal(result, exp)
+
+        exp = String(['zrt', 'a zit longer', 'evenlongzerthanthat', 'z', NA])
+        result = s.slice_replace(-10, 3, 'z')
+        tm.assert_string_equal(result, exp)
+
+    def test_encode_decode(self):
+        base = String([u'a', u'b', u'a\xe4'])
+        s = base.encode('utf-8')
+
+        f = lambda x: x.decode('utf-8')
+        result = s.decode('utf-8')
+        exp = String(s.map(f))
+
+        tm.assert_string_equal(result, exp)
+
+    def test_encode_decode_errors(self):
+        encodeBase = String([u'a', u'b', u'a\x9d'])
+
+        with tm.assertRaises(UnicodeEncodeError):
+            encodeBase.encode('cp1252')
+
+        f = lambda x: x.encode('cp1252', 'ignore')
+        result = encodeBase.encode('cp1252', 'ignore')
+        exp = String(encodeBase.map(f))
+        print(result)
+        tm.assert_string_equal(result, exp)
+
+        decodeBase = String([b'a', b'b', b'a\x9d'])
+
+        with tm.assertRaises(UnicodeDecodeError):
+            decodeBase.decode('cp1252')
+
+        f = lambda x: x.decode('cp1252', 'ignore')
+        result = decodeBase.decode('cp1252', 'ignore')
+        exp = String(decodeBase.map(f))
+
+        tm.assert_string_equal(result, exp)
+
+    def test_strip_lstrip_rstrip(self):
+        s = String(['  aa   ', ' bb \n', NA, 'cc  '])
+
+        tm.assert_string_equal(s.strip(), String(['aa', 'bb', NA, 'cc']))
+
+        exp = String(['aa   ', 'bb \n', NA, 'cc  '])
+        tm.assert_string_equal(s.lstrip(), exp)
+
+        exp = String(['  aa', ' bb', NA, 'cc'])
+        tm.assert_string_equal(s.rstrip(), exp)
+
+    def test_strip_lstrip_rstrip_unicode(self):
+        # unicode
+        s = String([u'  aa   ', u' bb \n', NA, u'cc  '])
+
+        exp = String([u'aa', u'bb', NA, u'cc'])
+        tm.assert_string_equal(s.strip(), exp)
+
+        exp = String([u'aa   ', u'bb \n', NA, u'cc  '])
+        tm.assert_string_equal(s.lstrip(), exp)
+
+        exp = String([u'  aa', u' bb', NA, u'cc'])
+        tm.assert_string_equal(s.rstrip(), exp)
+
+    def test_strip_lstrip_rstrip_args(self):
+        s = String(['xxABCxx', 'xx BNSD', 'LDFJH xx'])
+
+        xp = String(['ABC', ' BNSD', 'LDFJH '])
+        tm.assert_string_equal(s.strip('x'), xp)
+
+        xp = String(['ABCxx', ' BNSD', 'LDFJH xx'])
+        tm.assert_string_equal(s.lstrip('x'), xp)
+
+        xp = String(['xxABC', 'xx BNSD', 'LDFJH '])
+        tm.assert_string_equal(s.rstrip('x'), xp)
+
+    def test_strip_lstrip_rstrip_args_unicode(self):
+        s = String([u'xxABCxx', u'xx BNSD', u'LDFJH xx'])
+
+        xp = String(['ABC', ' BNSD', 'LDFJH '])
+        tm.assert_string_equal(s.strip(u'x'), xp)
+
+        xp = String(['ABCxx', ' BNSD', 'LDFJH xx'])
+        tm.assert_string_equal(s.lstrip(u'x'), xp)
+
+        xp = String(['xxABC', 'xx BNSD', 'LDFJH '])
+        tm.assert_string_equal(s.rstrip(u'x'), xp)
+
+    def test_index(self):
+        s = String(['ABCDEFG', 'BCDEFEF', 'DEFGHIJEF', 'EFGHEF'])
+
+        result = s.index('EF')
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 3, 1, 0], dtype=np.int64))
+        expected = np.array([v.index('EF') for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        result = s.rindex('EF')
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 5, 7, 4], dtype=np.int64))
+        expected = np.array([v.rindex('EF') for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        result = s.index('EF', 3)
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 3, 7, 4], dtype=np.int64))
+        expected = np.array([v.index('EF', 3) for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        result = s.rindex('EF', 3)
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 5, 7, 4], dtype=np.int64))
+        expected = np.array([v.rindex('EF', 3) for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        result = s.index('E', 4, 8)
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 5, 7, 4], dtype=np.int64))
+        expected = np.array([v.index('E', 4, 8) for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        result = s.rindex('E', 0, 5)
+        tm.assert_numpy_array_equal(result,
+                                    np.array([4, 3, 1, 4], dtype=np.int64))
+        expected = np.array([v.rindex('E', 0, 5) for v in s.get_values()],
+                            dtype=np.int64)
+        tm.assert_numpy_array_equal(result, expected)
+
+        with tm.assertRaisesRegexp(ValueError, "substring not found"):
+            result = s.index('DE')
+
+        with tm.assertRaisesRegexp(TypeError,
+                                   "expected a string object, not int"):
+            result = s.index(0)
+
+        # test with nan
+        s = String(['abcb', 'ab', 'bcbe', np.nan])
+        result = s.index('b')
+        tm.assert_numpy_array_equal(result, np.array([1, 1, 0, np.nan]))
+        result = s.rindex('b')
+        tm.assert_numpy_array_equal(result, np.array([3, 1, 2, np.nan]))
+
+    def test_casemethods(self):
+        values = String(["FOO", "BAR", NA, "Blah", "blurg", "abc abc"])
+        exp = String(["foo", "bar", NA, "blah", "blurg", "abc abc"])
+        tm.assert_string_equal(values.lower(), exp)
+
+        exp = String(["FOO", "BAR", NA, "BLAH", "BLURG", "ABC ABC"])
+        tm.assert_string_equal(values.upper(), exp)
+
+        exp = String(["Foo", "Bar", NA, "Blah", "Blurg", "Abc Abc"])
+        tm.assert_string_equal(values.title(), exp)
+
+        exp = String(["Foo", "Bar", NA, "Blah", "Blurg", "Abc abc"])
+        tm.assert_string_equal(values.capitalize(), exp)
+
+        exp = String(["foo", "bar", NA, "bLAH", "BLURG", "ABC ABC"])
+        tm.assert_string_equal(values.swapcase(), exp)
+
+        # unicode
+        values = String([u"FOO", u"BAR", NA, u"Blah", u"blurg", u"abc abc"])
+        exp = String([u"foo", u"bar", NA, u"blah", u"blurg", u"abc abc"])
+        tm.assert_string_equal(values.lower(), exp)
+
+        exp = String([u"FOO", u"BAR", NA, u"BLAH", u"BLURG", u"ABC ABC"])
+        tm.assert_string_equal(values.upper(), exp)
+
+        exp = String([u"Foo", u"Bar", NA, u"Blah", u"Blurg", u"Abc Abc"])
+        tm.assert_string_equal(values.title(), exp)
+
+        exp = String([u"Foo", u"Bar", NA, u"Blah", u"Blurg", u"Abc abc"])
+        tm.assert_string_equal(values.capitalize(), exp)
+
+        exp = String([u"foo", u"bar", NA, u"bLAH", u"BLURG", u"ABC ABC"])
+        tm.assert_string_equal(values.swapcase(), exp)
+
+    def test_ismethods(self):
+        values = ['A', 'b', 'Xy', '4', '3A', '', 'TT', '55', '-', '  ']
+        str_s = strings.String(values)
+
+        alnum_e = np.array([True, True, True, True, True,
+                            False, True, True, False, False])
+        alpha_e = np.array([True, True, True, False, False,
+                            False, True, False, False, False])
+        digit_e = np.array([False, False, False, True, False,
+                            False, False, True, False, False])
+
+        space_e = np.array([False, False, False, False, False,
+                            False, False, False, False, True])
+        lower_e = np.array([False, True, False, False, False,
+                            False, False, False, False, False])
+        upper_e = np.array([True, False, False, False, True,
+                            False, True, False, False, False])
+        title_e = np.array([True, False, True, False, True,
+                            False, False, False, False, False])
+
+        tm.assert_numpy_array_equal(str_s.isalnum(), alnum_e)
+        tm.assert_numpy_array_equal(str_s.isalpha(), alpha_e)
+        tm.assert_numpy_array_equal(str_s.isdigit(), digit_e)
+        tm.assert_numpy_array_equal(str_s.isspace(), space_e)
+        tm.assert_numpy_array_equal(str_s.islower(), lower_e)
+        tm.assert_numpy_array_equal(str_s.isupper(), upper_e)
+        tm.assert_numpy_array_equal(str_s.istitle(), title_e)
+
+        self.assertEqual(str_s.isalnum().tolist(),
+                         [v.isalnum() for v in values])
+        self.assertEqual(str_s.isalpha().tolist(),
+                         [v.isalpha() for v in values])
+        self.assertEqual(str_s.isdigit().tolist(),
+                         [v.isdigit() for v in values])
+        self.assertEqual(str_s.isspace().tolist(),
+                         [v.isspace() for v in values])
+        self.assertEqual(str_s.islower().tolist(),
+                         [v.islower() for v in values])
+        self.assertEqual(str_s.isupper().tolist(),
+                         [v.isupper() for v in values])
+        self.assertEqual(str_s.istitle().tolist(),
+                         [v.istitle() for v in values])
 
 
 class TestStringMethods(tm.TestCase):
@@ -79,7 +440,7 @@ class TestStringMethods(tm.TestCase):
             pass
 
         self.assertFalse(i)
-        assert_series_equal(ds, s)
+        tm.assert_series_equal(ds, s)
 
     def test_iter_object_try_string(self):
         ds = Series([slice(None, randint(10), randint(10, 20)) for _ in range(
@@ -298,6 +659,7 @@ class TestStringMethods(tm.TestCase):
         result = values.str.title()
         exp = Series(["Foo", "Bar", NA, "Blah", "Blurg"])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
         mixed = Series(["FOO", NA, "bar", True, datetime.today(), "blah", None,
@@ -305,14 +667,15 @@ class TestStringMethods(tm.TestCase):
         mixed = mixed.str.title()
         exp = Series(["Foo", NA, "Bar", NA, NA, "Blah", NA, NA, NA])
         tm.assert_almost_equal(mixed, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u("FOO"), NA, u("bar"), u("Blurg")])
+        values = Series([u"FOO", NA, u"bar", u"Blurg"])
 
         results = values.str.title()
-        exp = Series([u("Foo"), NA, u("Bar"), u("Blurg")])
-
+        exp = Series([u"Foo", NA, u"Bar", u"Blurg"])
         tm.assert_series_equal(results, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_lower_upper(self):
         values = Series(['om', NA, 'nom', 'nom'])
@@ -320,34 +683,40 @@ class TestStringMethods(tm.TestCase):
         result = values.str.upper()
         exp = Series(['OM', NA, 'NOM', 'NOM'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = result.str.lower()
         tm.assert_series_equal(result, values)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
-        mixed = Series(['a', NA, 'b', True, datetime.today(), 'foo', None, 1,
-                        2.])
+        mixed = Series(['a', NA, 'b', True, datetime.today(), 'foo',
+                        None, 1, 2.])
         mixed = mixed.str.upper()
         rs = Series(mixed).str.lower()
         xp = Series(['a', NA, 'b', NA, NA, 'foo', NA, NA, NA])
         tm.assertIsInstance(rs, Series)
         tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u('om'), NA, u('nom'), u('nom')])
+        values = Series([u'om', NA, u'nom', u'nom'])
 
         result = values.str.upper()
-        exp = Series([u('OM'), NA, u('NOM'), u('NOM')])
+        exp = Series([u'OM', NA, u'NOM', u'NOM'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = result.str.lower()
         tm.assert_series_equal(result, values)
+        self.assertEqual(result.dtype, 'string')
 
     def test_capitalize(self):
         values = Series(["FOO", "BAR", NA, "Blah", "blurg"])
         result = values.str.capitalize()
         exp = Series(["Foo", "Bar", NA, "Blah", "Blurg"])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
         mixed = Series(["FOO", NA, "bar", True, datetime.today(), "blah", None,
@@ -355,18 +724,21 @@ class TestStringMethods(tm.TestCase):
         mixed = mixed.str.capitalize()
         exp = Series(["Foo", NA, "Bar", NA, NA, "Blah", NA, NA, NA])
         tm.assert_almost_equal(mixed, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u("FOO"), NA, u("bar"), u("Blurg")])
+        values = Series([u"FOO", NA, u"bar", u"Blurg"])
         results = values.str.capitalize()
-        exp = Series([u("Foo"), NA, u("Bar"), u("Blurg")])
+        exp = Series([u"Foo", NA, u"Bar", u"Blurg"])
         tm.assert_series_equal(results, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_swapcase(self):
         values = Series(["FOO", "BAR", NA, "Blah", "blurg"])
         result = values.str.swapcase()
         exp = Series(["foo", "bar", NA, "bLAH", "BLURG"])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
         mixed = Series(["FOO", NA, "bar", True, datetime.today(), "Blah", None,
@@ -374,12 +746,14 @@ class TestStringMethods(tm.TestCase):
         mixed = mixed.str.swapcase()
         exp = Series(["foo", NA, "BAR", NA, NA, "bLAH", NA, NA, NA])
         tm.assert_almost_equal(mixed, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u("FOO"), NA, u("bar"), u("Blurg")])
+        values = Series([u"FOO", NA, u"bar", u"Blurg"])
         results = values.str.swapcase()
-        exp = Series([u("foo"), NA, u("BAR"), u("bLURG")])
+        exp = Series([u"foo", NA, u"BAR", u"bLURG"])
         tm.assert_series_equal(results, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_casemethods(self):
         values = ['aaa', 'bbb', 'CCC', 'Dddd', 'eEEE']
@@ -531,10 +905,10 @@ class TestStringMethods(tm.TestCase):
         # na GH #6609
         res = Series(['a', 0, np.nan]).str.match('a', na=False)
         exp = Series([True, False, False])
-        assert_series_equal(exp, res)
+        tm.assert_series_equal(exp, res)
         res = Series(['a', 0, np.nan]).str.match('a')
         exp = Series([True, np.nan, np.nan])
-        assert_series_equal(exp, res)
+        tm.assert_series_equal(exp, res)
 
     def test_extract_expand_None(self):
         values = Series(['fooBAD__barBAD', NA, 'foo'])
@@ -739,7 +1113,8 @@ class TestStringMethods(tm.TestCase):
             result_df = s_or_idx.str.extract(r'(?P<uno>A)\d', expand=True)
             tm.assertIsInstance(result_df, DataFrame)
             result_series = result_df['uno']
-            assert_series_equal(result_series, Series(['A', 'A'], name='uno'))
+            tm.assert_series_equal(result_series,
+                                   Series(['A', 'A'], name='uno'))
 
     def test_extract_series(self):
         # extract should give the same result whether or not the
@@ -1134,16 +1509,20 @@ class TestStringMethods(tm.TestCase):
         tm.assert_frame_equal(extract_one_noname, no_match_index)
 
     def test_empty_str_methods(self):
-        empty_str = empty = Series(dtype=str)
-        empty_int = Series(dtype=int)
-        empty_bool = Series(dtype=bool)
-        empty_list = Series(dtype=list)
-        empty_bytes = Series(dtype=object)
+        empty_str = empty = Series(String([]))
+        empty_int = Series([], dtype=int)
+        empty_bool = Series([], dtype=bool)
+        empty_list = Series([], dtype=list)
+        empty_bytes = Series([], dtype=object)
 
         # GH7241
         # (extract) on empty series
 
-        tm.assert_series_equal(empty_str, empty.str.cat(empty))
+        # ToDo: temp
+        # tm.assert_series_equal(empty_str, empty.str.cat(empty))
+        empty_obj = Series([], dtype=object)
+        tm.assert_series_equal(empty_obj, empty.str.cat(empty))
+
         self.assertEqual('', empty.str.cat())
         tm.assert_series_equal(empty_str, empty.str.title())
         tm.assert_series_equal(empty_int, empty.str.count('a'))
@@ -1155,18 +1534,15 @@ class TestStringMethods(tm.TestCase):
         tm.assert_series_equal(empty_str, empty.str.replace('a', 'b'))
         tm.assert_series_equal(empty_str, empty.str.repeat(3))
         tm.assert_series_equal(empty_bool, empty.str.match('^a'))
-        tm.assert_frame_equal(
-            DataFrame(columns=[0], dtype=str),
-            empty.str.extract('()', expand=True))
-        tm.assert_frame_equal(
-            DataFrame(columns=[0, 1], dtype=str),
-            empty.str.extract('()()', expand=True))
-        tm.assert_series_equal(
-            empty_str,
-            empty.str.extract('()', expand=False))
-        tm.assert_frame_equal(
-            DataFrame(columns=[0, 1], dtype=str),
-            empty.str.extract('()()', expand=False))
+
+        tm.assert_frame_equal(DataFrame(columns=[0], dtype=str),
+                              empty.str.extract('()', expand=True))
+        tm.assert_frame_equal(DataFrame(columns=[0, 1], dtype=str),
+                              empty.str.extract('()()', expand=True))
+        tm.assert_series_equal(empty_str,
+                               empty.str.extract('()', expand=False))
+        tm.assert_frame_equal(DataFrame(columns=[0, 1], dtype=str),
+                              empty.str.extract('()()', expand=False))
         tm.assert_frame_equal(DataFrame(dtype=str), empty.str.get_dummies())
         tm.assert_series_equal(empty_str, empty_list.str.join(''))
         tm.assert_series_equal(empty_int, empty.str.len())
@@ -1226,10 +1602,6 @@ class TestStringMethods(tm.TestCase):
         digit_e = [False, False, False, True, False, False, False, True, False,
                    False]
 
-        # TODO: unused
-        num_e = [False, False, False, True, False, False,  # noqa
-                 False, True, False, False]
-
         space_e = [False, False, False, False, False, False, False, False,
                    False, True]
         lower_e = [False, True, False, False, False, False, False, False,
@@ -1247,20 +1619,20 @@ class TestStringMethods(tm.TestCase):
         tm.assert_series_equal(str_s.str.isupper(), Series(upper_e))
         tm.assert_series_equal(str_s.str.istitle(), Series(title_e))
 
-        self.assertEqual(str_s.str.isalnum().tolist(), [v.isalnum()
-                                                        for v in values])
-        self.assertEqual(str_s.str.isalpha().tolist(), [v.isalpha()
-                                                        for v in values])
-        self.assertEqual(str_s.str.isdigit().tolist(), [v.isdigit()
-                                                        for v in values])
-        self.assertEqual(str_s.str.isspace().tolist(), [v.isspace()
-                                                        for v in values])
-        self.assertEqual(str_s.str.islower().tolist(), [v.islower()
-                                                        for v in values])
-        self.assertEqual(str_s.str.isupper().tolist(), [v.isupper()
-                                                        for v in values])
-        self.assertEqual(str_s.str.istitle().tolist(), [v.istitle()
-                                                        for v in values])
+        self.assertEqual(str_s.str.isalnum().tolist(),
+                         [v.isalnum() for v in values])
+        self.assertEqual(str_s.str.isalpha().tolist(),
+                         [v.isalpha() for v in values])
+        self.assertEqual(str_s.str.isdigit().tolist(),
+                         [v.isdigit() for v in values])
+        self.assertEqual(str_s.str.isspace().tolist(),
+                         [v.isspace() for v in values])
+        self.assertEqual(str_s.str.islower().tolist(),
+                         [v.islower() for v in values])
+        self.assertEqual(str_s.str.isupper().tolist(),
+                         [v.isupper() for v in values])
+        self.assertEqual(str_s.str.istitle().tolist(),
+                         [v.istitle() for v in values])
 
     def test_isnumeric(self):
         # 0x00bc: ¼ VULGAR FRACTION ONE QUARTER
@@ -1349,7 +1721,7 @@ class TestStringMethods(tm.TestCase):
         values = Series(['foo', 'fooo', 'fooooo', np.nan, 'fooooooo'])
 
         result = values.str.len()
-        exp = values.map(lambda x: len(x) if notnull(x) else NA)
+        exp = Series([3., 4., 6., np.nan, 8.])
         tm.assert_series_equal(result, exp)
 
         # mixed
@@ -1360,14 +1732,13 @@ class TestStringMethods(tm.TestCase):
         xp = Series([3, NA, 13, NA, NA, 3, NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
 
         # unicode
-        values = Series([u('foo'), u('fooo'), u('fooooo'), np.nan, u(
-            'fooooooo')])
+        values = Series([u'foo', u'fooo', u'fooooo', np.nan, u'fooooooo'])
 
         result = values.str.len()
-        exp = values.map(lambda x: len(x) if notnull(x) else NA)
+        exp = Series([3., 4., 6., np.nan, 8.])
         tm.assert_series_equal(result, exp)
 
     def test_findall(self):
@@ -1526,58 +1897,67 @@ class TestStringMethods(tm.TestCase):
 
         result = values.str.pad(5, side='left')
         exp = Series(['    a', '    b', NA, '    c', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='right')
         exp = Series(['a    ', 'b    ', NA, 'c    ', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='both')
         exp = Series(['  a  ', '  b  ', NA, '  c  ', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
-        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee', None, 1, 2.
-                        ])
+        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee',
+                        None, 1, 2.])
 
         rs = Series(mixed).str.pad(5, side='left')
         xp = Series(['    a', NA, '    b', NA, NA, '   ee', NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
-        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee', None, 1, 2.
-                        ])
+        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee',
+                        None, 1, 2.])
 
         rs = Series(mixed).str.pad(5, side='right')
         xp = Series(['a    ', NA, 'b    ', NA, NA, 'ee   ', NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
-        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee', None, 1, 2.
-                        ])
+        mixed = Series(['a', NA, 'b', True, datetime.today(), 'ee',
+                        None, 1, 2.])
 
         rs = Series(mixed).str.pad(5, side='both')
         xp = Series(['  a  ', NA, '  b  ', NA, NA, '  ee ', NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
         tm.assert_almost_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u('a'), u('b'), NA, u('c'), NA, u('eeeeee')])
+        values = Series([u'a', u'b', NA, u'c', NA, u'eeeeee'])
 
         result = values.str.pad(5, side='left')
-        exp = Series([u('    a'), u('    b'), NA, u('    c'), NA, u('eeeeee')])
+        exp = Series([u'    a', u'    b', NA, u'    c', NA, u'eeeeee'])
         tm.assert_almost_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='right')
-        exp = Series([u('a    '), u('b    '), NA, u('c    '), NA, u('eeeeee')])
-        tm.assert_almost_equal(result, exp)
+        exp = Series([u'a    ', u'b    ', NA, u'c    ', NA, u'eeeeee'])
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='both')
-        exp = Series([u('  a  '), u('  b  '), NA, u('  c  '), NA, u('eeeeee')])
-        tm.assert_almost_equal(result, exp)
+        exp = Series([u'  a  ', u'  b  ', NA, u'  c  ', NA, u'eeeeee'])
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_pad_fillchar(self):
 
@@ -1585,23 +1965,26 @@ class TestStringMethods(tm.TestCase):
 
         result = values.str.pad(5, side='left', fillchar='X')
         exp = Series(['XXXXa', 'XXXXb', NA, 'XXXXc', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='right', fillchar='X')
         exp = Series(['aXXXX', 'bXXXX', NA, 'cXXXX', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.pad(5, side='both', fillchar='X')
         exp = Series(['XXaXX', 'XXbXX', NA, 'XXcXX', NA, 'eeeeee'])
         tm.assert_almost_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not str"):
-            result = values.str.pad(5, fillchar='XY')
+            values.str.pad(5, fillchar='XY')
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not int"):
-            result = values.str.pad(5, fillchar=5)
+            values.str.pad(5, fillchar=5)
 
     def test_pad_width(self):
         # GH 13598
@@ -1656,52 +2039,61 @@ class TestStringMethods(tm.TestCase):
 
         result = values.str.center(5)
         exp = Series(['  a  ', '  b  ', NA, '  c  ', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.ljust(5)
         exp = Series(['a    ', 'b    ', NA, 'c    ', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.rjust(5)
         exp = Series(['    a', '    b', NA, '    c', NA, 'eeeeee'])
-        tm.assert_almost_equal(result, exp)
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         # mixed
         mixed = Series(['a', NA, 'b', True, datetime.today(), 'c', 'eee', None,
                         1, 2.])
 
         rs = Series(mixed).str.center(5)
-        xp = Series(['  a  ', NA, '  b  ', NA, NA, '  c  ', ' eee ', NA, NA, NA
-                     ])
+        xp = Series(['  a  ', NA, '  b  ', NA, NA, '  c  ',
+                     ' eee ', NA, NA, NA])
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
         rs = Series(mixed).str.ljust(5)
-        xp = Series(['a    ', NA, 'b    ', NA, NA, 'c    ', 'eee  ', NA, NA, NA
-                     ])
+        xp = Series(['a    ', NA, 'b    ', NA, NA, 'c    ',
+                     'eee  ', NA, NA, NA])
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
         rs = Series(mixed).str.rjust(5)
-        xp = Series(['    a', NA, '    b', NA, NA, '    c', '  eee', NA, NA, NA
-                     ])
+        xp = Series(['    a', NA, '    b', NA, NA, '    c',
+                     '  eee', NA, NA, NA])
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u('a'), u('b'), NA, u('c'), NA, u('eeeeee')])
+        values = Series([u'a', u'b', NA, u'c', NA, u'eeeeee'])
 
         result = values.str.center(5)
-        exp = Series([u('  a  '), u('  b  '), NA, u('  c  '), NA, u('eeeeee')])
-        tm.assert_almost_equal(result, exp)
+        exp = Series([u'  a  ', u'  b  ', NA, u'  c  ', NA, u'eeeeee'])
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.ljust(5)
-        exp = Series([u('a    '), u('b    '), NA, u('c    '), NA, u('eeeeee')])
-        tm.assert_almost_equal(result, exp)
+        exp = Series([u'a    ', u'b    ', NA, u'c    ', NA, u'eeeeee'])
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.rjust(5)
-        exp = Series([u('    a'), u('    b'), NA, u('    c'), NA, u('eeeeee')])
-        tm.assert_almost_equal(result, exp)
+        exp = Series([u'    a', u'    b', NA, u'    c', NA, u'eeeeee'])
+        tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_center_ljust_rjust_fillchar(self):
         values = Series(['a', 'bb', 'cccc', 'ddddd', 'eeeeee'])
@@ -1709,50 +2101,53 @@ class TestStringMethods(tm.TestCase):
         result = values.str.center(5, fillchar='X')
         expected = Series(['XXaXX', 'XXbbX', 'Xcccc', 'ddddd', 'eeeeee'])
         tm.assert_series_equal(result, expected)
-        expected = np.array([v.center(5, 'X') for v in values.values],
-                            dtype=np.object_)
-        tm.assert_numpy_array_equal(result.values, expected)
+        self.assertEqual(result.dtype, 'string')
+
+        expected = String([v.center(5, 'X') for v in values.values])
+        tm.assert_string_equal(result.values, expected)
 
         result = values.str.ljust(5, fillchar='X')
         expected = Series(['aXXXX', 'bbXXX', 'ccccX', 'ddddd', 'eeeeee'])
         tm.assert_series_equal(result, expected)
-        expected = np.array([v.ljust(5, 'X') for v in values.values],
-                            dtype=np.object_)
-        tm.assert_numpy_array_equal(result.values, expected)
+        self.assertEqual(result.dtype, 'string')
+
+        expected = String([v.ljust(5, 'X') for v in values.values])
+        tm.assert_string_equal(result.values, expected)
 
         result = values.str.rjust(5, fillchar='X')
         expected = Series(['XXXXa', 'XXXbb', 'Xcccc', 'ddddd', 'eeeeee'])
         tm.assert_series_equal(result, expected)
-        expected = np.array([v.rjust(5, 'X') for v in values.values],
-                            dtype=np.object_)
-        tm.assert_numpy_array_equal(result.values, expected)
+        self.assertEqual(result.dtype, 'string')
+
+        expected = String([v.rjust(5, 'X') for v in values.values])
+        tm.assert_string_equal(result.values, expected)
 
         # If fillchar is not a charatter, normal str raises TypeError
         # 'aaa'.ljust(5, 'XY')
         # TypeError: must be char, not str
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not str"):
-            result = values.str.center(5, fillchar='XY')
+            values.str.center(5, fillchar='XY')
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not str"):
-            result = values.str.ljust(5, fillchar='XY')
+            values.str.ljust(5, fillchar='XY')
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not str"):
-            result = values.str.rjust(5, fillchar='XY')
+            values.str.rjust(5, fillchar='XY')
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not int"):
-            result = values.str.center(5, fillchar=1)
+            values.str.center(5, fillchar=1)
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not int"):
-            result = values.str.ljust(5, fillchar=1)
+            values.str.ljust(5, fillchar=1)
 
         with tm.assertRaisesRegexp(TypeError,
                                    "fillchar must be a character, not int"):
-            result = values.str.rjust(5, fillchar=1)
+            values.str.rjust(5, fillchar=1)
 
     def test_zfill(self):
         values = Series(['1', '22', 'aaa', '333', '45678'])
@@ -1760,21 +2155,24 @@ class TestStringMethods(tm.TestCase):
         result = values.str.zfill(5)
         expected = Series(['00001', '00022', '00aaa', '00333', '45678'])
         tm.assert_series_equal(result, expected)
-        expected = np.array([v.zfill(5) for v in values.values],
-                            dtype=np.object_)
-        tm.assert_numpy_array_equal(result.values, expected)
+        self.assertEqual(result.dtype, 'string')
+
+        expected = String([v.zfill(5) for v in values.values])
+        tm.assert_string_equal(result.values, expected)
 
         result = values.str.zfill(3)
         expected = Series(['001', '022', 'aaa', '333', '45678'])
         tm.assert_series_equal(result, expected)
-        expected = np.array([v.zfill(3) for v in values.values],
-                            dtype=np.object_)
-        tm.assert_numpy_array_equal(result.values, expected)
+        self.assertEqual(result.dtype, 'string')
+
+        expected = String([v.zfill(3) for v in values.values])
+        tm.assert_string_equal(result.values, expected)
 
         values = Series(['1', np.nan, 'aaa', np.nan, '45678'])
         result = values.str.zfill(5)
         expected = Series(['00001', np.nan, '00aaa', np.nan, '45678'])
         tm.assert_series_equal(result, expected)
+        self.assertEqual(result.dtype, 'string')
 
     def test_split(self):
         values = Series(['a_b_c', 'c_d_e', NA, 'f_g_h'])
@@ -2201,17 +2599,15 @@ class TestStringMethods(tm.TestCase):
         result = values.str.slice(2, 5)
         exp = Series(['foo', 'bar', NA, 'baz'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         for start, stop, step in [(0, 3, -1), (None, None, -1), (3, 10, 2),
                                   (3, 0, -1)]:
-            try:
-                result = values.str.slice(start, stop, step)
-                expected = Series([s[start:stop:step] if not isnull(s) else NA
-                                   for s in values])
-                tm.assert_series_equal(result, expected)
-            except:
-                print('failed on %s:%s:%s' % (start, stop, step))
-                raise
+            result = values.str.slice(start, stop, step)
+            expected = Series([s[start:stop:step] if not isnull(s)
+                               else NA for s in values])
+            tm.assert_series_equal(result, expected)
+            self.assertEqual(result.dtype, 'string')
 
         # mixed
         mixed = Series(['aafootwo', NA, 'aabartwo', True, datetime.today(),
@@ -2221,59 +2617,72 @@ class TestStringMethods(tm.TestCase):
         xp = Series(['foo', NA, 'bar', NA, NA, NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(result.dtype, 'string')
 
-        rs = Series(mixed).str.slice(2, 5, -1)
-        xp = Series(['oof', NA, 'rab', NA, NA, NA, NA, NA])
+        result = Series(mixed).str.slice(2, 5, -1)
+        xp = Series(['', NA, '', NA, NA, NA, NA, NA])
+        tm.assert_series_equal(result, xp)
+        self.assertEqual(result.dtype, 'string')
 
         # unicode
-        values = Series([u('aafootwo'), u('aabartwo'), NA, u('aabazqux')])
+        values = Series([u'aafootwo', u'aabartwo', NA, u'aabazqux'])
 
         result = values.str.slice(2, 5)
-        exp = Series([u('foo'), u('bar'), NA, u('baz')])
+        exp = Series([u'foo', u'bar', NA, u'baz'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.slice(0, -1, 2)
-        exp = Series([u('afow'), u('abrw'), NA, u('abzu')])
+        exp = Series([u'afow', u'abrw', NA, u'abzu'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_slice_replace(self):
-        values = Series(['short', 'a bit longer', 'evenlongerthanthat', '', NA
-                         ])
+        values = Series(['short', 'a bit longer', 'evenlongerthanthat',
+                         '', NA])
 
         exp = Series(['shrt', 'a it longer', 'evnlongerthanthat', '', NA])
         result = values.str.slice_replace(2, 3)
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         exp = Series(['shzrt', 'a zit longer', 'evznlongerthanthat', 'z', NA])
         result = values.str.slice_replace(2, 3, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
-        exp = Series(['shzort', 'a zbit longer', 'evzenlongerthanthat', 'z', NA
-                      ])
+        exp = Series(['shzort', 'a zbit longer', 'evzenlongerthanthat',
+                      'z', NA])
         result = values.str.slice_replace(2, 2, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
-        exp = Series(['shzort', 'a zbit longer', 'evzenlongerthanthat', 'z', NA
-                      ])
+        exp = Series(['shzort', 'a zbit longer', 'evzenlongerthanthat',
+                      'z', NA])
         result = values.str.slice_replace(2, 1, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         exp = Series(['shorz', 'a bit longez', 'evenlongerthanthaz', 'z', NA])
         result = values.str.slice_replace(-1, None, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         exp = Series(['zrt', 'zer', 'zat', 'z', NA])
         result = values.str.slice_replace(None, -2, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         exp = Series(['shortz', 'a bit znger', 'evenlozerthanthat', 'z', NA])
         result = values.str.slice_replace(6, 8, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         exp = Series(['zrt', 'a zit longer', 'evenlongzerthanthat', 'z', NA])
         result = values.str.slice_replace(-10, 3, 'z')
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_strip_lstrip_rstrip(self):
         values = Series(['  aa   ', ' bb \n', NA, 'cc  '])
@@ -2281,14 +2690,17 @@ class TestStringMethods(tm.TestCase):
         result = values.str.strip()
         exp = Series(['aa', 'bb', NA, 'cc'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.lstrip()
         exp = Series(['aa   ', 'bb \n', NA, 'cc  '])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.rstrip()
         exp = Series(['  aa', ' bb', NA, 'cc'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_strip_lstrip_rstrip_mixed(self):
         # mixed
@@ -2299,83 +2711,93 @@ class TestStringMethods(tm.TestCase):
         xp = Series(['aa', NA, 'bb', NA, NA, NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
         rs = Series(mixed).str.lstrip()
         xp = Series(['aa  ', NA, 'bb \t\n', NA, NA, NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
         rs = Series(mixed).str.rstrip()
         xp = Series(['  aa', NA, ' bb', NA, NA, NA, NA, NA])
 
         tm.assertIsInstance(rs, Series)
-        tm.assert_almost_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
     def test_strip_lstrip_rstrip_unicode(self):
         # unicode
-        values = Series([u('  aa   '), u(' bb \n'), NA, u('cc  ')])
+        values = Series([u'  aa   ', u' bb \n', NA, u'cc  '])
 
         result = values.str.strip()
-        exp = Series([u('aa'), u('bb'), NA, u('cc')])
+        exp = Series([u'aa', u'bb', NA, u'cc'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.lstrip()
-        exp = Series([u('aa   '), u('bb \n'), NA, u('cc  ')])
+        exp = Series([u'aa   ', u'bb \n', NA, u'cc  '])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         result = values.str.rstrip()
-        exp = Series([u('  aa'), u(' bb'), NA, u('cc')])
+        exp = Series([u'  aa', u' bb', NA, u'cc'])
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_strip_lstrip_rstrip_args(self):
         values = Series(['xxABCxx', 'xx BNSD', 'LDFJH xx'])
 
         rs = values.str.strip('x')
         xp = Series(['ABC', ' BNSD', 'LDFJH '])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
 
         rs = values.str.lstrip('x')
         xp = Series(['ABCxx', ' BNSD', 'LDFJH xx'])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
 
         rs = values.str.rstrip('x')
         xp = Series(['xxABC', 'xx BNSD', 'LDFJH '])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
     def test_strip_lstrip_rstrip_args_unicode(self):
-        values = Series([u('xxABCxx'), u('xx BNSD'), u('LDFJH xx')])
+        values = Series([u'xxABCxx', u'xx BNSD', u'LDFJH xx'])
 
         rs = values.str.strip(u('x'))
         xp = Series(['ABC', ' BNSD', 'LDFJH '])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
-        rs = values.str.lstrip(u('x'))
+        rs = values.str.lstrip(u'x')
         xp = Series(['ABCxx', ' BNSD', 'LDFJH xx'])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
-        rs = values.str.rstrip(u('x'))
+        rs = values.str.rstrip(u'x')
         xp = Series(['xxABC', 'xx BNSD', 'LDFJH '])
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
+        self.assertEqual(rs.dtype, 'string')
 
     def test_wrap(self):
         # test values are: two words less than width, two words equal to width,
         # two words greater than width, one word less than width, one word
         # equal to width, one word greater than width, multiple tokens with
         # trailing whitespace equal to width
-        values = Series([u('hello world'), u('hello world!'), u(
-            'hello world!!'), u('abcdefabcde'), u('abcdefabcdef'), u(
-                'abcdefabcdefa'), u('ab ab ab ab '), u('ab ab ab ab a'), u(
-                    '\t')])
+        values = Series([u'hello world', u'hello world!',
+                         u'hello world!!', u'abcdefabcde', u'abcdefabcdef',
+                         u'abcdefabcdefa', u'ab ab ab ab ', u'ab ab ab ab a',
+                         u'\t'])
 
         # expected values
-        xp = Series([u('hello world'), u('hello world!'), u('hello\nworld!!'),
-                     u('abcdefabcde'), u('abcdefabcdef'), u('abcdefabcdef\na'),
-                     u('ab ab ab ab'), u('ab ab ab ab\na'), u('')])
+        xp = Series([u'hello world', u'hello world!', u'hello\nworld!!',
+                     u'abcdefabcde', u'abcdefabcdef', u'abcdefabcdef\na',
+                     u'ab ab ab ab', u'ab ab ab ab\na', u''])
 
         rs = values.str.wrap(12, break_long_words=True)
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
 
         # test with pre and post whitespace (non-unicode), NaN, and non-ascii
         # Unicode
@@ -2383,7 +2805,7 @@ class TestStringMethods(tm.TestCase):
                          ])
         xp = Series(['  pre', NA, u('\xac\u20ac\U00008000 ab\nadcafe')])
         rs = values.str.wrap(6)
-        assert_series_equal(rs, xp)
+        tm.assert_series_equal(rs, xp)
 
     def test_get(self):
         values = Series(['a_b_c', 'c_d_e', np.nan, 'f_g_h'])
@@ -2417,27 +2839,27 @@ class TestStringMethods(tm.TestCase):
         result = s.str.contains('a')
         expected = Series([False, False, False, True, True, False, np.nan,
                            False, False, True])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.contains('a', case=False)
         expected = Series([True, False, False, True, True, False, np.nan, True,
                            False, True])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.contains('Aa')
         expected = Series([False, False, False, True, False, False, np.nan,
                            False, False, False])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.contains('ba')
         expected = Series([False, False, False, True, False, False, np.nan,
                            False, False, False])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.contains('ba', case=False)
         expected = Series([False, False, False, True, True, False, np.nan,
                            True, False, False])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
     def test_contains_nan(self):
         # PR #14171
@@ -2467,17 +2889,17 @@ class TestStringMethods(tm.TestCase):
         result = s.str.replace('A', 'YYY')
         expected = Series(['YYY', 'B', 'C', 'YYYaba', 'Baca', '', NA,
                            'CYYYBYYY', 'dog', 'cat'])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.replace('A', 'YYY', case=False)
         expected = Series(['YYY', 'B', 'C', 'YYYYYYbYYY', 'BYYYcYYY', '', NA,
                            'CYYYBYYY', 'dog', 'cYYYt'])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str.replace('^.a|dog', 'XX-XX ', case=False)
         expected = Series(['A', 'B', 'C', 'XX-XX ba', 'XX-XX ca', '', NA,
                            'XX-XX BA', 'XX-XX ', 'XX-XX t'])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
     def test_string_slice_get_syntax(self):
         s = Series(['YYY', 'B', 'C', 'YYYYYYbYYY', 'BYYYcYYY', NA, 'CYYYBYYY',
@@ -2485,15 +2907,15 @@ class TestStringMethods(tm.TestCase):
 
         result = s.str[0]
         expected = s.str.get(0)
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str[:3]
         expected = s.str.slice(stop=3)
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         result = s.str[2::-1]
         expected = s.str.slice(start=2, step=-1)
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
     def test_string_slice_out_of_bounds(self):
         s = Series([(1, 2), (1, ), (3, 4, 5)])
@@ -2501,12 +2923,12 @@ class TestStringMethods(tm.TestCase):
         result = s.str[1]
         expected = Series([2, np.nan, 4])
 
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
         s = Series(['foo', 'b', 'ba'])
         result = s.str[1]
         expected = Series(['o', np.nan, 'a'])
-        assert_series_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
     def test_match_findall_flags(self):
         data = {'Dave': 'dave@google.com',
@@ -2533,7 +2955,7 @@ class TestStringMethods(tm.TestCase):
         self.assertEqual(result[0], True)
 
     def test_encode_decode(self):
-        base = Series([u('a'), u('b'), u('a\xe4')])
+        base = Series([u'a', u'b', u'a\xe4'])
         series = base.str.encode('utf-8')
 
         f = lambda x: x.decode('utf-8')
@@ -2541,6 +2963,7 @@ class TestStringMethods(tm.TestCase):
         exp = series.map(f)
 
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_encode_decode_errors(self):
         encodeBase = Series([u('a'), u('b'), u('a\x9d')])
@@ -2551,6 +2974,7 @@ class TestStringMethods(tm.TestCase):
         result = encodeBase.str.encode('cp1252', 'ignore')
         exp = encodeBase.map(f)
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
         decodeBase = Series([b'a', b'b', b'a\x9d'])
 
@@ -2561,6 +2985,7 @@ class TestStringMethods(tm.TestCase):
         exp = decodeBase.map(f)
 
         tm.assert_series_equal(result, exp)
+        self.assertEqual(result.dtype, 'string')
 
     def test_normalize(self):
         values = ['ABC', u'ＡＢＣ', u'１２３', np.nan, u'ｱｲｴ']

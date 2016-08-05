@@ -95,20 +95,11 @@ class CategoricalDtypeType(type):
     pass
 
 
-class CategoricalDtype(ExtensionDtype):
+class _ObjectExtensionDtype(ExtensionDtype):
 
-    """
-    A np.dtype duck-typed class, suitable for holding a custom categorical
-    dtype.
-
-    THIS IS NOT A REAL NUMPY DTYPE, but essentially a sub-class of np.object
-    """
-    name = 'category'
-    type = CategoricalDtypeType
     kind = 'O'
     str = '|O08'
     base = np.dtype('O')
-    _cache = {}
 
     def __new__(cls):
 
@@ -127,19 +118,54 @@ class CategoricalDtype(ExtensionDtype):
         if isinstance(other, compat.string_types):
             return other == self.name
 
-        return isinstance(other, CategoricalDtype)
+        return isinstance(other, type(self))
 
     @classmethod
     def construct_from_string(cls, string):
         """ attempt to construct this type from a string, raise a TypeError if
         it's not possible """
         try:
-            if string == 'category':
+            if string == cls.name:
                 return cls()
         except:
             pass
 
-        raise TypeError("cannot construct a CategoricalDtype")
+        raise TypeError("cannot construct a {0}".format(cls.__name__))
+
+
+
+class CategoricalDtype(_ObjectExtensionDtype):
+
+    """
+    A np.dtype duck-typed class, suitable for holding a custom categorical
+    dtype.
+
+    THIS IS NOT A REAL NUMPY DTYPE, but essentially a sub-class of np.object
+    """
+    name = 'category'
+    type = CategoricalDtypeType
+    _cache = {}
+
+
+class StringDtypeType(type):
+    """
+    the type of StringDtype, this metaclass determines subclass ability
+    """
+    pass
+
+
+class StringDtype(_ObjectExtensionDtype):
+
+    """
+    A np.dtype duck-typed class, suitable for holding a custom string
+    dtype.
+
+    THIS IS NOT A REAL NUMPY DTYPE, but essentially a sub-class of np.object
+    """
+    name = 'string'
+    type = StringDtypeType
+    _cache = {}
+
 
 
 class DatetimeTZDtypeType(type):

@@ -56,10 +56,10 @@ class CategoricalIndex(Index, base.PandasDelegate):
             name = data.name
 
         if isinstance(data, ABCCategorical):
-            data = cls._create_categorical(cls, data, categories, ordered)
+            data = cls._create_internal(cls, data, categories, ordered)
         elif isinstance(data, CategoricalIndex):
             data = data._data
-            data = cls._create_categorical(cls, data, categories, ordered)
+            data = cls._create_internal(cls, data, categories, ordered)
         else:
 
             # don't allow scalars
@@ -68,7 +68,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
                 if data is not None or categories is None:
                     cls._scalar_data_error(data)
                 data = []
-            data = cls._create_categorical(cls, data, categories, ordered)
+            data = cls._create_internal(cls, data, categories, ordered)
 
         if copy:
             data = data.copy()
@@ -106,7 +106,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
         return CategoricalIndex(cat, name=name)
 
     @staticmethod
-    def _create_categorical(self, data, categories=None, ordered=None):
+    def _create_internal(self, data, categories=None, ordered=None):
         """
         *this is an internal non-public method*
 
@@ -138,7 +138,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
                     **kwargs):
         result = object.__new__(cls)
 
-        values = cls._create_categorical(cls, values, categories, ordered)
+        values = cls._create_internal(cls, values, categories, ordered)
         result._data = values
         result.name = name
         for k, v in compat.iteritems(kwargs):
@@ -181,7 +181,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
             values = other
             if not is_list_like(values):
                 values = [values]
-            other = CategoricalIndex(self._create_categorical(
+            other = CategoricalIndex(self._create_internal(
                 self, other, categories=self.categories, ordered=self.ordered))
             if not other.isin(values).all():
                 raise TypeError("cannot append a non-category item to a "
@@ -217,17 +217,18 @@ class CategoricalIndex(Index, base.PandasDelegate):
         """
         max_categories = (10 if get_option("display.max_categories") == 0 else
                           get_option("display.max_categories"))
-        attrs = [
-            ('categories',
-             ibase.default_pprint(self.categories,
-                                  max_seq_items=max_categories)),
-            ('ordered', self.ordered)]
+        attrs = self._init_internal_attrs()
         if self.name is not None:
             attrs.append(('name', ibase.default_pprint(self.name)))
         attrs.append(('dtype', "'%s'" % self.dtype))
         max_seq_items = get_option('display.max_seq_items') or len(self)
         if len(self) > max_seq_items:
             attrs.append(('length', len(self)))
+        return attrs
+
+    def _init_internal_attrs(self):
+        attrs = [('categories', ibase.default_pprint(self.categories,
+                  max_seq_items=max_categories)), ('ordered', self.ordered)]
         return attrs
 
     @property
@@ -596,7 +597,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
                 if isinstance(other, CategoricalIndex):
                     other = other._values
                 elif isinstance(other, Index):
-                    other = self._create_categorical(
+                    other = self._create_internal(
                         self, other._values, categories=self.categories,
                         ordered=self.ordered)
 

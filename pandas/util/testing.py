@@ -1000,6 +1000,14 @@ def assert_categorical_equal(left, right, check_dtype=True,
     assert_attr_equal('ordered', left, right, obj=obj)
 
 
+def assert_string_equal(left, right, obj='String'):
+    assertIsInstance(left, pd.String, '[String] ')
+    assertIsInstance(right, pd.String, '[String] ')
+
+    assert_categorical_equal(left, right, check_dtype=True,
+                             obj=obj, check_category_order=True)
+
+
 def raise_assert_detail(obj, message, left, right, diff=None):
     if isinstance(left, np.ndarray):
         left = pprint_thing(left)

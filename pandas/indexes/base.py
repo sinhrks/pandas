@@ -262,7 +262,12 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
                 elif inferred == 'boolean':
                     # don't support boolean explicity ATM
                     pass
-                elif inferred != 'string':
+                elif inferred == 'string':
+                    pass
+                    # from .strings import StringIndex
+                    # return StringIndex(data, copy=copy, dtype=dtype,
+                    #                    name=name)
+                else:
                     if inferred.startswith('datetime'):
                         if (lib.is_datetime_with_singletz_array(subarr) or
                                 'tz' in kwargs):
