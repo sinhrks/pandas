@@ -176,7 +176,9 @@ class Series(base.IndexOpsMixin, strings.StringAccessorMixin,
                 data = data._data
             elif isinstance(data, dict):
                 if index is None:
-                    if isinstance(data, OrderedDict):
+                    if len(data) == 0:
+                        index = _default_index(0)
+                    elif isinstance(data, OrderedDict):
                         index = Index(data)
                     else:
                         index = Index(_try_sort(data))

@@ -142,6 +142,7 @@ class Generic(object):
         # non-inclusion
         result = o._get_bool_data()
         expected = self._construct(n, value='empty', **kwargs)
+        print(result.index, result.columns)
         self._compare(result, expected)
 
         # get the bool data

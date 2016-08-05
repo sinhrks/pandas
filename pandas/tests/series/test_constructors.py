@@ -86,10 +86,13 @@ class TestSeriesConstructors(TestData, tm.TestCase):
     def test_constructor_empty(self):
         empty = Series()
         empty2 = Series([])
+        empty3 = Series({})
 
-        # the are Index() and RangeIndex() which don't compare type equal
-        # but are just .equals
-        assert_series_equal(empty, empty2, check_index_type=False)
+        exp = Series([], index=pd.RangeIndex(0, 0))
+
+        assert_series_equal(empty, exp, check_index_type=True)
+        assert_series_equal(empty2, exp, check_index_type=True)
+        assert_series_equal(empty3, exp, check_index_type=True)
 
         empty = Series(index=lrange(10))
         empty2 = Series(np.nan, index=lrange(10))

@@ -395,7 +395,11 @@ class DataFrame(NDFrame):
             keys = list(data.keys())
             if not isinstance(data, OrderedDict):
                 keys = _try_sort(keys)
-            columns = data_names = Index(keys)
+
+            if len(keys) == 0:
+                columns = data_names = _default_index(0)
+            else:
+                columns = data_names = Index(keys)
             arrays = [data[k] for k in keys]
 
         return _arrays_to_mgr(arrays, data_names, index, columns, dtype=dtype)
@@ -5367,7 +5371,7 @@ def extract_index(data):
 
     index = None
     if len(data) == 0:
-        index = Index([])
+        index = _default_index(0)
     elif len(data) > 0:
         raw_lengths = []
         indexes = []
@@ -5605,10 +5609,13 @@ def _convert_object_array(content, columns, coerce_float=False, dtype=None):
     if columns is None:
         columns = _default_index(len(content))
     else:
+        print(1, columns)
         if len(columns) != len(content):  # pragma: no cover
             # caller's responsibility to check for this...
             raise AssertionError('%d columns passed, passed data had %s '
                                  'columns' % (len(columns), len(content)))
+        if len(columns) == 0 and not hasattr(columns, 'dtype'):
+            columns = _default_index(0)
 
     # provide soft conversion of object dtypes
     def convert(arr):

@@ -892,6 +892,10 @@ class TestDataFrameConstructors(tm.TestCase, TestData):
         expected = DataFrame(index=[0])
         tm.assert_frame_equal(result, expected)
 
+        tm.assert_frame_equal(result, expected)
+        tm.assert_index_equal(result.index, pd.RangeIndex(1), exact=True)
+        tm.assert_index_equal(result.columns, pd.RangeIndex(0), exact=True)
+
     def test_constructor_ordered_dict_preserve_order(self):
         # see gh-13304
         expected = DataFrame([[2, 1]], columns=['b', 'a'])
@@ -973,6 +977,8 @@ class TestDataFrameConstructors(tm.TestCase, TestData):
         result = DataFrame([Series({})])
         expected = DataFrame(index=[0])
         tm.assert_frame_equal(result, expected)
+        tm.assert_index_equal(result.index, pd.RangeIndex(1), exact=True)
+        tm.assert_index_equal(result.columns, pd.RangeIndex(0), exact=True)
 
         data = [OrderedDict([['a', 1.5], ['b', 3.0], ['c', 4.0]]),
                 OrderedDict([['a', 1.5], ['b', 3.0], ['c', 6.0]])]
