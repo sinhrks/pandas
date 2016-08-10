@@ -362,6 +362,26 @@ class TestIndex(Base, tm.TestCase):
                         pd.TimedeltaIndex(list(values), dtype=dtype)]:
                 tm.assert_index_equal(res, idx)
 
+    def test_constructor_numeric_compat(self):
+        # GH xxx
+        for arr in [['1', 2, '3'], [1, 2, 3], ['1', '2', '3']]:
+            idx = Index(arr, dtype=np.int64)
+            exp = Int64Index([1, 2, 3])
+            tm.assert_index_equal(idx, exp)
+            tm.assert_index_equal(Index(arr).astype(np.int64), exp)
+
+        for arr in [['1', np.nan, '3'], [1, np.nan, 3], ['1', 'NaN', '3']]:
+            idx = Index(arr, dtype=np.float64)
+            exp = Float64Index([1, np.nan, 3])
+            tm.assert_index_equal(idx, exp)
+            tm.assert_index_equal(Index(arr).astype(np.float64), exp)
+
+        # Index silently ignores exception now
+        res = Index(['A', 'B', 'C'], dtype=np.int64)
+        tm.assert_index_equal(res, Index(['A', 'B', 'C']))
+        res = Index(['A', 'B', 'C'], dtype=np.float64)
+        tm.assert_index_equal(res, Index(['A', 'B', 'C']))
+
     def test_view_with_args(self):
 
         restricted = ['unicodeIndex', 'strIndex', 'catIndex', 'boolIndex',

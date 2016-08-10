@@ -213,17 +213,11 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
                             # return an actual float index
                             return Float64Index(data, copy=copy, dtype=dtype,
                                                 name=name)
-
-                        elif inferred == 'string':
-                            pass
                         else:
                             data = data.astype(dtype)
                     elif is_float_dtype(dtype):
                         inferred = lib.infer_dtype(data)
-                        if inferred == 'string':
-                            pass
-                        else:
-                            data = data.astype(dtype)
+                        data = data.astype(dtype)
                     else:
                         data = np.array(data, dtype=dtype, copy=copy)
 

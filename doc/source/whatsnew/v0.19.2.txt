@@ -53,6 +53,8 @@ Bug Fixes
 
 
 
+- Bug in ``Index`` may ignore spacified numeric ``dtype`` even if all inputs can be coerced to the specified dtype (:issue:`xxx`)
+
 
 
 - Bug in clipboard functions on linux with python2 with unicode and separators (:issue:`13747`)
