@@ -57,5 +57,8 @@ Bug Fixes
 - Bug in ``DataFrame.to_json`` where ``lines=True`` and a value contained a ``}`` character (:issue:`14391`)
 - Bug in ``df.groupby`` causing an ``AttributeError`` when grouping a single index frame by a column and the index level (:issue`14327`)
 
+- Bug in assignment against datetime-like data with ``int`` may incorrectly converted to datetime-like (:issue:`14145`)
+- Bug in assignment against ``int64`` data with ``np.ndarray`` with ``float64`` dtype may keep ``int64`` dtype (:issue:`14001`)
+
 - Bug in ``pd.pivot_table`` may raise ``TypeError`` or ``ValueError`` when ``index`` or ``columns``
   is not scalar and ``values`` is not specified (:issue:`14380`)
