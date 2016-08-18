@@ -499,7 +499,7 @@ class TestInsertIndexCoercion(CoercionBase, tm.TestCase):
         # period + int => object
         msg = "Given date string not likely a datetime."
         with tm.assertRaisesRegexp(ValueError, msg):
-            print(obj.insert(1, 1))
+            obj.insert(1, 1)
 
 
 class TestWhereCoercion(CoercionBase, tm.TestCase):
@@ -598,13 +598,24 @@ class TestWhereCoercion(CoercionBase, tm.TestCase):
             self._assert_where_conversion(obj, cond, values, exp,
                                           np.complex128)
 
-        # int + bool -> int
-        exp = klass([1, 1, 3, 1])
-        self._assert_where_conversion(obj, cond, True, exp, np.int64)
+        if klass is pd.Series:
+            # int + bool -> int
+            exp = klass([1, 1, 3, 1])
+            self._assert_where_conversion(obj, cond, True, exp, np.int64)
 
-        values = klass([True, False, True, True])
-        exp = klass([1, 0, 3, 1])
-        self._assert_where_conversion(obj, cond, values, exp, np.int64)
+            values = klass([True, False, True, True])
+            exp = klass([1, 0, 3, 1])
+            self._assert_where_conversion(obj, cond, values, exp, np.int64)
+        elif klass is pd.Index:
+            # int + bool -> object
+            exp = klass([1, True, 3, True])
+            self._assert_where_conversion(obj, cond, True, exp, np.object)
+
+            values = klass([True, False, True, True])
+            exp = klass([1, False, 3, True])
+            self._assert_where_conversion(obj, cond, values, exp, np.object)
+        else:
+            raise NotImplementedError
 
     def test_where_series_int64(self):
         self._where_int64_common(pd.Series)
@@ -644,13 +655,24 @@ class TestWhereCoercion(CoercionBase, tm.TestCase):
             self._assert_where_conversion(obj, cond, values, exp,
                                           np.complex128)
 
-        # float + bool -> float
-        exp = klass([1.1, 1.0, 3.3, 1.0])
-        self._assert_where_conversion(obj, cond, True, exp, np.float64)
+        if klass is pd.Series:
+            # float + bool -> float
+            exp = klass([1.1, 1.0, 3.3, 1.0])
+            self._assert_where_conversion(obj, cond, True, exp, np.float64)
 
-        values = klass([True, False, True, True])
-        exp = klass([1.1, 0.0, 3.3, 1.0])
-        self._assert_where_conversion(obj, cond, values, exp, np.float64)
+            values = klass([True, False, True, True])
+            exp = klass([1.1, 0.0, 3.3, 1.0])
+            self._assert_where_conversion(obj, cond, values, exp, np.float64)
+        elif klass is pd.Index:
+            # float + bool -> object
+            exp = klass([1.1, True, 3.3, True])
+            self._assert_where_conversion(obj, cond, True, exp, np.object)
+
+            values = klass([True, False, True, True])
+            exp = klass([1.1, False, 3.3, True])
+            self._assert_where_conversion(obj, cond, values, exp, np.object)
+        else:
+            raise NotImplementedError
 
     def test_where_series_float64(self):
         self._where_float64_common(pd.Series)
@@ -789,10 +811,12 @@ class TestWhereCoercion(CoercionBase, tm.TestCase):
         cond = pd.Index([True, False, True, False])
 
         # datetime64 + datetime64 -> datetime64
-        # must support scalar
-        msg = "cannot coerce a Timestamp with a tz on a naive Block"
-        with tm.assertRaises(TypeError):
-            obj.where(cond, pd.Timestamp('2012-01-01'))
+        exp = pd.Index([pd.Timestamp('2011-01-01'),
+                        pd.Timestamp('2012-01-02'),
+                        pd.Timestamp('2011-01-03'),
+                        pd.Timestamp('2012-01-02')])
+        values = pd.Timestamp('2012-01-02')
+        self._assert_where_conversion(obj, cond, values, exp, 'datetime64[ns]')
 
         values = pd.Index([pd.Timestamp('2012-01-01'),
                            pd.Timestamp('2012-01-02'),
@@ -804,22 +828,38 @@ class TestWhereCoercion(CoercionBase, tm.TestCase):
                         pd.Timestamp('2012-01-04')])
         self._assert_where_conversion(obj, cond, values, exp, 'datetime64[ns]')
 
-        # ToDo: coerce to object
-        msg = ("Index\\(\\.\\.\\.\\) must be called with a collection "
-               "of some kind")
-        with tm.assertRaisesRegexp(TypeError, msg):
-            obj.where(cond, pd.Timestamp('2012-01-01', tz='US/Eastern'))
+        # datetime64 + datetime64tz -> datetime64
+        exp = pd.Index([pd.Timestamp('2011-01-01'),
+                        pd.Timestamp('2012-01-01', tz='US/Eastern'),
+                        pd.Timestamp('2011-01-03'),
+                        pd.Timestamp('2012-01-01', tz='US/Eastern')])
+        values = pd.Timestamp('2012-01-01', tz='US/Eastern')
+        self._assert_where_conversion(obj, cond, values, exp, np.object)
 
-        # ToDo: do not ignore timezone, must be object
         values = pd.Index([pd.Timestamp('2012-01-01', tz='US/Eastern'),
                            pd.Timestamp('2012-01-02', tz='US/Eastern'),
                            pd.Timestamp('2012-01-03', tz='US/Eastern'),
                            pd.Timestamp('2012-01-04', tz='US/Eastern')])
         exp = pd.Index([pd.Timestamp('2011-01-01'),
-                        pd.Timestamp('2012-01-02'),
+                        pd.Timestamp('2012-01-02', tz='US/Eastern'),
                         pd.Timestamp('2011-01-03'),
-                        pd.Timestamp('2012-01-04')])
-        self._assert_where_conversion(obj, cond, values, exp, 'datetime64[ns]')
+                        pd.Timestamp('2012-01-04', tz='US/Eastern')])
+        self._assert_where_conversion(obj, cond, values, exp, np.object)
+
+        # datetime64 + timedelta64 -> object
+        exp = pd.Index([pd.Timestamp('2011-01-01'),
+                        pd.Timedelta('2 day'),
+                        pd.Timestamp('2011-01-03'),
+                        pd.Timedelta('2 day')])
+        values = pd.Timedelta('2 day')
+        self._assert_where_conversion(obj, cond, values, exp, np.object)
+
+        values = pd.TimedeltaIndex(['1 day', '2 day', '3 day', '4 day'])
+        exp = pd.Index([pd.Timestamp('2011-01-01'),
+                        pd.Timedelta('2 day'),
+                        pd.Timestamp('2011-01-03'),
+                        pd.Timedelta('4 day')])
+        self._assert_where_conversion(obj, cond, values, exp, np.object)
 
     def test_where_series_datetime64tz(self):
         pass

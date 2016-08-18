@@ -317,19 +317,7 @@ class CategoricalIndex(Index, base.PandasDelegate):
         """ always allow reindexing """
         pass
 
-    def where(self, cond, other=None):
-        """
-        .. versionadded:: 0.19.0
-
-        Return an Index of same shape as self and whose corresponding
-        entries are from self where cond is True and otherwise are from
-        other.
-
-        Parameters
-        ----------
-        cond : boolean same length as self
-        other : scalar, or array-like
-        """
+    def _where_same_dtype(self, cond, other=None):
         if other is None:
             other = self._na_value
         values = np.where(cond, self.values, other)

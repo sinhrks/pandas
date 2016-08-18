@@ -31,7 +31,7 @@ from pandas.types.common import (_ensure_int64, _ensure_object,
                                  needs_i8_conversion,
                                  is_iterator, is_list_like,
                                  is_scalar)
-from pandas.types.cast import _coerce_indexer_dtype
+from pandas.types.cast import _coerce_indexer_dtype, _find_common_type
 from pandas.core.common import (is_bool_indexer,
                                 _values_from_object,
                                 _asarray_tuplesafe)
@@ -515,6 +515,29 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         nv.validate_repeat(args, kwargs)
         return self._shallow_copy(self._values.repeat(n))
 
+    def _maybe_cast_to_store(self, other):
+        is_list = is_list_like(other)
+
+        if is_list:
+            other_index = _ensure_index(other)
+        else:
+            if isnull(other) and self._can_hold_na:
+                return self, self._na_value_internal
+            other_index = Index([other])
+
+        if not is_dtype_equal(self.dtype, other_index.dtype):
+            dtype = _find_common_type([self.dtype, other_index.dtype])
+            if is_list:
+                return self.astype(dtype), other_index.astype(dtype)
+            else:
+                return self.astype(dtype), other
+
+        else:
+            if is_list:
+                return self, other_index._values
+            else:
+                return self, other_index._values[0]
+
     def where(self, cond, other=None):
         """
         .. versionadded:: 0.19.0
@@ -528,10 +551,18 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         cond : boolean same length as self
         other : scalar, or array-like
         """
-        if other is None:
-            other = self._na_value
-        values = np.where(cond, self.values, other)
-        return self._shallow_copy_with_infer(values, dtype=self.dtype)
+
+        casted, other = self._maybe_cast_to_store(other)
+        if is_dtype_equal(self.dtype, casted.dtype):
+            return self._where_same_dtype(cond, other=other)
+        else:
+            return casted.where(cond, other=other)
+
+    def _where_same_dtype(self, cond, other=None):
+        if not is_list_like(other) and isnull(other):
+            other = self._na_value_internal
+        values = np.where(cond, self._values, other)
+        return self._shallow_copy(values)
 
     def ravel(self, order='C'):
         """
@@ -1016,7 +1047,9 @@ class Index(IndexOpsMixin, StringAccessorMixin, PandasObject):
         return self.values
 
     _na_value = np.nan
-    """The expected NA value to use with this index."""
+    """ The expected NA value to use with this index. """
+    _na_value_internal = np.nan
+    """ The NA value used internally with this index. """
 
     # introspection
     @property

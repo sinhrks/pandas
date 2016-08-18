@@ -376,5 +376,6 @@ class Float64Index(NumericIndex):
         return lib.ismember_nans(np.array(self), value_set,
                                  isnull(list(value_set)).any())
 
+
 Float64Index._add_numeric_methods()
 Float64Index._add_logical_methods_disabled()

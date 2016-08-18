@@ -89,8 +89,7 @@ class TimelikeOps(object):
             attribs['freq'] = None
         if 'tz' in attribs:
             attribs['tz'] = None
-        return self._ensure_localized(
-            self._shallow_copy(result, **attribs))
+        return self._ensure_localized(self._shallow_copy(result, **attribs))
 
     @Appender(_round_doc % "round")
     def round(self, freq, *args, **kwargs):
@@ -363,7 +362,9 @@ class DatetimeIndexOpsMixin(object):
         return self._simple_new(values)
 
     _na_value = tslib.NaT
-    """The expected NA value to use with this index."""
+    """ The expected NA value to use with this index. """
+    _na_value_internal = tslib.iNaT
+    """ The NA value used internally with this index. """
 
     @cache_readonly
     def _isnan(self):
@@ -767,27 +768,6 @@ class DatetimeIndexOpsMixin(object):
             freq = None
         return self._shallow_copy(self.asi8.repeat(repeats),
                                   freq=freq)
-
-    def where(self, cond, other=None):
-        """
-        .. versionadded:: 0.19.0
-
-        Return an Index of same shape as self and whose corresponding
-        entries are from self where cond is True and otherwise are from
-        other.
-
-        Parameters
-        ----------
-        cond : boolean same length as self
-        other : scalar, or array-like
-        """
-        other = _ensure_datetimelike_to_i8(other)
-        values = _ensure_datetimelike_to_i8(self)
-        result = np.where(cond, values, other).astype('i8')
-
-        result = self._ensure_localized(result)
-        return self._shallow_copy(result,
-                                  **self._get_attributes_dict())
 
     def summary(self, name=None):
         """
