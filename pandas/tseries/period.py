@@ -757,33 +757,29 @@ class PeriodIndex(DatelikeOps, DatetimeIndexOpsMixin, Int64Index):
 
         if not isinstance(key, compat.string_types):
             try:
-                p = Period(key, freq=self.freq)
-                ordinal = tslib.iNaT if p is tslib.NaT else p.ordinal
-                return Index.get_loc(self, ordinal, method, tolerance)
-            except (TypeError, KeyError, ValueError):
+                key = Period(key, freq=self.freq)
+            except (TypeError, ValueError):
                 raise KeyError(key)
-
         else:
             try:
                 _, parsed, reso = parse_time_string(key, self.freq)
                 grp = frequencies.Resolution.get_freq_group(reso)
-                if grp == self._freqn:
-                    p = Period(key, freq=self.freq)
-                    return Index.get_loc(self, p.ordinal, method, tolerance)
+                if grp >= self._freqn:
+                    key = Period(key, freq=self.freq)
 
-                elif grp < self._freqn:
+                else:
                     return self._get_period_slice(parsed, reso)
-
-            except (TypeError, KeyError):
+            except (TypeError, KeyError) as e:
                 pass
-            try:
-                ordinal = tslib.iNaT if key is tslib.NaT else key.ordinal
-                if tolerance is not None:
-                    tolerance = self._convert_tolerance(tolerance)
-                return self._int64index.get_loc(ordinal, method, tolerance)
 
-            except KeyError:
-                raise KeyError(key)
+        try:
+            ordinal = tslib.iNaT if key is tslib.NaT else key.ordinal
+            if tolerance is not None:
+                tolerance = self._convert_tolerance(tolerance)
+            return self._int64index.get_loc(ordinal, method, tolerance)
+
+        except (KeyError, AttributeError):
+            raise KeyError(key)
 
     def _maybe_cast_slice_bound(self, label, side, kind):
         """

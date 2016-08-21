@@ -810,11 +810,11 @@ class TestPeriodIndex(DatetimeLike, tm.TestCase):
 
         for method in [None, 'pad', 'backfill', 'nearest']:
             self.assertEqual(idx.get_loc(idx[1], method), 1)
-            self.assertEqual(
-                idx.get_loc(idx[1].asfreq('H', how='start'), method), 1)
+            self.assertEqual(idx.get_loc(idx[1].asfreq('H', how='start'),
+                                         method), 1)
             self.assertEqual(idx.get_loc(idx[1].to_timestamp(), method), 1)
-            self.assertEqual(
-                idx.get_loc(idx[1].to_timestamp().to_pydatetime(), method), 1)
+            self.assertEqual(idx.get_loc(idx[1].to_timestamp().to_pydatetime(),
+                                         method), 1)
             self.assertEqual(idx.get_loc(str(idx[1]), method), 1)
 
         idx = pd.period_range('2000-01-01', periods=5)[::2]
