@@ -81,16 +81,18 @@ class TimelikeOps(object):
         unit = to_offset(freq).nanos
 
         # round the local times
-        values = _ensure_datetimelike_to_i8(self)
+        values = _ensure_datetimelike_to_i8(self, localize=True)
 
         result = (unit * rounder(values / float(unit))).astype('i8')
         attribs = self._get_attributes_dict()
         if 'freq' in attribs:
             attribs['freq'] = None
         if 'tz' in attribs:
+            tz = attribs['tz']
             attribs['tz'] = None
-        return self._ensure_localized(
-            self._shallow_copy(result, **attribs))
+            return self._shallow_copy(result, **attribs).tz_localize(tz=tz)
+
+        return self._shallow_copy(result, **attribs)
 
     @Appender(_round_doc % "round")
     def round(self, freq, *args, **kwargs):
@@ -189,29 +191,6 @@ class DatetimeIndexOpsMixin(object):
             return Index(result)
         except TypeError:
             return result
-
-    def _ensure_localized(self, result):
-        """
-        ensure that we are re-localized
-
-        This is for compat as we can then call this on all datetimelike
-        indexes generally (ignored for Period/Timedelta)
-
-        Parameters
-        ----------
-        result : DatetimeIndex / i8 ndarray
-
-        Returns
-        -------
-        localized DTI
-        """
-
-        # reconvert to local tz
-        if getattr(self, 'tz', None) is not None:
-            if not isinstance(result, ABCIndexClass):
-                result = self._simple_new(result)
-            result = result.tz_localize(self.tz)
-        return result
 
     @property
     def _box_func(self):
@@ -790,11 +769,16 @@ class DatetimeIndexOpsMixin(object):
         cond : boolean same length as self
         other : scalar, or array-like
         """
+        if hasattr(other, 'dtype'):
+            if not is_dtype_equal(self.dtype, other.dtype):
+                self = self.asobject
+                other = other.astype(object)
+                return self.where(cond, other)
+
         other = _ensure_datetimelike_to_i8(other)
         values = _ensure_datetimelike_to_i8(self)
         result = np.where(cond, values, other).astype('i8')
 
-        result = self._ensure_localized(result)
         return self._shallow_copy(result,
                                   **self._get_attributes_dict())
 
@@ -838,13 +822,13 @@ class DatetimeIndexOpsMixin(object):
         return self._simple_new(new_data, **attribs)
 
 
-def _ensure_datetimelike_to_i8(other):
+def _ensure_datetimelike_to_i8(other, localize=False):
     """ helper for coercing an input scalar or array to i8 """
     if lib.isscalar(other) and isnull(other):
         other = tslib.iNaT
     elif isinstance(other, ABCIndexClass):
         # convert tz if needed
-        if getattr(other, 'tz', None) is not None:
+        if localize and getattr(other, 'tz', None) is not None:
             other = other.tz_localize(None).asi8
         else:
             other = other.asi8

@@ -830,10 +830,10 @@ class TestWhereCoercion(CoercionBase, tm.TestCase):
                            pd.Timestamp('2012-01-03', tz='US/Eastern'),
                            pd.Timestamp('2012-01-04', tz='US/Eastern')])
         exp = pd.Index([pd.Timestamp('2011-01-01'),
-                        pd.Timestamp('2012-01-02'),
+                        pd.Timestamp('2012-01-02', tz='US/Eastern'),
                         pd.Timestamp('2011-01-03'),
-                        pd.Timestamp('2012-01-04')])
-        self._assert_where_conversion(obj, cond, values, exp, 'datetime64[ns]')
+                        pd.Timestamp('2012-01-04', tz='US/Eastern')])
+        self._assert_where_conversion(obj, cond, values, exp, 'object')
 
     def test_where_series_datetime64tz(self):
         pass
