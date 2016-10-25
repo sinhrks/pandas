@@ -814,11 +814,13 @@ class Block(PandasObject):
         if not is_list_like(new) and isnull(new) and not self.is_object:
             new = self.fill_value
 
+        print('putmask', new, type(new), self._can_hold_element(new))
         if self._can_hold_element(new):
             if transpose:
                 new_values = new_values.T
 
             new = self._try_cast(new)
+            print('casted', new, type(new))
 
             # If the default repeat behavior in np.putmask would go in the
             # wrong direction, then explictly repeat and reshape new instead
@@ -827,7 +829,7 @@ class Block(PandasObject):
                     new = np.repeat(
                         new, new_values.shape[-1]).reshape(self.shape)
                 new = new.astype(new_values.dtype)
-
+            print('casted2', new, type(new))
             np.putmask(new_values, mask, new)
 
         # maybe upcast me
@@ -878,6 +880,7 @@ class Block(PandasObject):
 
             else:
                 nv = _putmask_smart(new_values, mask, new)
+                print(nv, getattr(nv, 'dtype', 'no-dtype'))
                 new_blocks.append(self.make_block(values=nv, fastpath=True))
 
             return new_blocks
@@ -1669,11 +1672,12 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin, IntBlock):
 
         # allow filling with integers to be
         # interpreted as seconds
-        if not isinstance(value, np.timedelta64):
+        if not isinstance(value, np.timedelta64) and is_integer(value):
             value = Timedelta(value, unit='s')
         return super(TimeDeltaBlock, self).fillna(value, **kwargs)
 
     def _can_hold_element(self, element):
+        print('can-hold-element', element, type(element))
         if is_list_like(element):
             element = np.array(element)
             return is_dtype_equal(element, self) or is_integer_dtype(element)
