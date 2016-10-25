@@ -374,8 +374,7 @@ class TestTimedeltaBlock(tm.TestCase):
 
         for val in [1.1, pd.Timestamp('2011-01-01'),
                     np.datetime64('2011-01-01'),
-                    pd.Timestamp('2011-01-01', tz=tz),
-                    tz.localize(datetime(2011, 1, 1)), '2011-01-01',
+                    datetime(2011, 1, 1), '2011-01-01',
                     np.array([1, 2], dtype='M8[ns]')]:
             self.assertFalse(block._can_hold_element(val))
 
