@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=W0102
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import nose
 import numpy as np
@@ -315,6 +315,69 @@ class TestDatetimeBlock(tm.TestCase):
             coerced = block._try_coerce_args(block.values, val)[2]
             self.assertEqual(np.int64, type(coerced))
             self.assertEqual(pd.Timestamp('2010-10-10'), pd.Timestamp(coerced))
+
+    def test_can_hold_element(self):
+        # datetimeblock
+        block = create_block('M8[ns]', [0])
+
+        for val in [1, pd.Timestamp('2011-01-01'), pd.NaT, np.nan,
+                    np.array([1, 2, 3]),
+                    np.array([1, 2], dtype='M8[ns]')]:
+            self.assertTrue(block._can_hold_element(val))
+
+        tm._skip_if_no_pytz()
+        import pytz
+
+        tz = pytz.timezone('US/Eastern')
+        for val in [1.1, pd.Timestamp('2011-01-01', tz=tz),
+                    tz.localize(datetime(2011, 1, 1)), '2011-01-01',
+                    pd.Timedelta('1 day'), timedelta(1),
+                    np.array([1., 2., 3.])]:
+
+            self.assertFalse(block._can_hold_element(val))
+
+
+class TestDatetimeTZBlock(tm.TestCase):
+    _multiprocess_can_split_ = True
+
+    def test_can_hold_element(self):
+        # datetimeblock
+        block = create_block('M8[ns, US/Eastern]', [0])
+
+        for val in [1, pd.Timestamp('2011-01-01', tz='US/Eastern'),
+                    pd.NaT, np.nan, np.array([1, 2, 3])]:
+            self.assertTrue(block._can_hold_element(val))
+
+        tm._skip_if_no_pytz()
+        import pytz
+
+        tz = pytz.timezone('Asia/Tokyo')
+        for val in [1.1, pd.Timestamp('2011-01-01'),
+                    np.datetime64('2011-01-01'),
+                    pd.Timestamp('2011-01-01', tz=tz),
+                    tz.localize(datetime(2011, 1, 1)), '2011-01-01',
+                    pd.Timedelta('1 day'), timedelta(1),
+                    np.array([1., 2., 3.]), np.array([1, 2], dtype='M8[ns]')]:
+            self.assertFalse(block._can_hold_element(val))
+
+
+class TestTimedeltaBlock(tm.TestCase):
+    _multiprocess_can_split_ = True
+
+    def test_can_hold_element(self):
+        # datetimeblock
+        block = create_block('m8[ns]', [0])
+
+        for val in [1, pd.Timedelta('1 day'), np.timedelta64(1, 'D'),
+                    timedelta(1), pd.NaT, np.nan]:
+            self.assertTrue(block._can_hold_element(val))
+
+        for val in [1.1, pd.Timestamp('2011-01-01'),
+                    np.datetime64('2011-01-01'),
+                    pd.Timestamp('2011-01-01', tz=tz),
+                    tz.localize(datetime(2011, 1, 1)), '2011-01-01',
+                    np.array([1, 2], dtype='M8[ns]')]:
+            self.assertFalse(block._can_hold_element(val))
 
 
 class TestBlockManager(tm.TestCase):

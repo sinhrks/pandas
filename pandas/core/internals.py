@@ -1673,6 +1673,14 @@ class TimeDeltaBlock(DatetimeLikeBlockMixin, IntBlock):
             value = Timedelta(value, unit='s')
         return super(TimeDeltaBlock, self).fillna(value, **kwargs)
 
+    def _can_hold_element(self, element):
+        if is_list_like(element):
+            element = np.array(element)
+            return is_dtype_equal(element, self) or is_integer_dtype(element)
+        return (is_integer(element) or
+                isinstance(element, (np.timedelta64, timedelta)) or
+                isnull(element))
+
     def _try_coerce_args(self, values, other):
         """
         Coerce values and other to int64, with null values converted to
@@ -2200,11 +2208,18 @@ class DatetimeBlock(DatetimeLikeBlockMixin, Block):
         # delegate
         return super(DatetimeBlock, self)._astype(dtype=dtype, **kwargs)
 
+    @cache_readonly
+    def _tz(self):
+        return str(None)
+
     def _can_hold_element(self, element):
+
         if is_list_like(element):
             element = np.array(element)
-            return element.dtype == _NS_DTYPE or element.dtype == np.int64
-        return (is_integer(element) or isinstance(element, datetime) or
+            return is_dtype_equal(element, self) or is_integer_dtype(element)
+        return (is_integer(element) or
+                (isinstance(element, datetime) and
+                 str(element.tzinfo) == self._tz) or
                 isnull(element))
 
     def _try_cast(self, element):
@@ -2334,6 +2349,10 @@ class DatetimeTZBlock(NonConsolidatableMixIn, DatetimeBlock):
 
         super(DatetimeTZBlock, self).__init__(values, placement=placement,
                                               ndim=ndim, **kwargs)
+
+    @cache_readonly
+    def _tz(self):
+        return str(self.dtype.tz)
 
     def copy(self, deep=True, mgr=None):
         """ copy constructor """
