@@ -230,6 +230,8 @@ cdef class {{name}}HashTable(HashTable):
         k = kh_get_{{dtype}}(self.table, key)
         return k != self.table.n_buckets
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef get_item(self, {{dtype}}_t val):
         cdef khiter_t k
         k = kh_get_{{dtype}}(self.table, val)
@@ -238,6 +240,8 @@ cdef class {{name}}HashTable(HashTable):
         else:
             raise KeyError(val)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def get_iter_test(self, {{dtype}}_t key, Py_ssize_t iterations):
         cdef Py_ssize_t i, val=0
         for i in range(iterations):
@@ -245,6 +249,8 @@ cdef class {{name}}HashTable(HashTable):
             if k != self.table.n_buckets:
                 val = self.table.vals[k]
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef set_item(self, {{dtype}}_t key, Py_ssize_t val):
         cdef:
             khiter_t k
@@ -257,6 +263,7 @@ cdef class {{name}}HashTable(HashTable):
         else:
             raise KeyError(key)
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def map(self, {{dtype}}_t[:] keys, int64_t[:] values):
         cdef:
@@ -271,6 +278,7 @@ cdef class {{name}}HashTable(HashTable):
                 k = kh_put_{{dtype}}(self.table, key, &ret)
                 self.table.vals[k] = <Py_ssize_t> values[i]
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def map_locations(self, ndarray[{{dtype}}_t, ndim=1] values):
         cdef:
@@ -285,6 +293,7 @@ cdef class {{name}}HashTable(HashTable):
                 k = kh_put_{{dtype}}(self.table, val, &ret)
                 self.table.vals[k] = i
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def lookup(self, {{dtype}}_t[:] values):
         cdef:
@@ -310,6 +319,7 @@ cdef class {{name}}HashTable(HashTable):
         labels = self.get_labels(values, uniques, 0, 0)
         return uniques.to_array(), labels
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def get_labels(self, {{dtype}}_t[:] values, {{name}}Vector uniques,
                    Py_ssize_t count_prior, Py_ssize_t na_sentinel,
@@ -352,6 +362,7 @@ cdef class {{name}}HashTable(HashTable):
 
         return np.asarray(labels)
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def get_labels_groupby(self, {{dtype}}_t[:] values):
         cdef:
@@ -395,6 +406,7 @@ cdef class {{name}}HashTable(HashTable):
 
         return np.asarray(labels), arr_uniques
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def unique(self, {{dtype}}_t[:] values):
         cdef:
@@ -455,6 +467,8 @@ cdef class StringHashTable(HashTable):
     def __dealloc__(self):
         kh_destroy_str(self.table)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef get_item(self, object val):
         cdef:
             khiter_t k
@@ -467,6 +481,8 @@ cdef class StringHashTable(HashTable):
         else:
             raise KeyError(val)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def get_iter_test(self, object key, Py_ssize_t iterations):
         cdef:
             Py_ssize_t i, val
@@ -479,6 +495,8 @@ cdef class StringHashTable(HashTable):
             if k != self.table.n_buckets:
                 val = self.table.vals[k]
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef set_item(self, object key, Py_ssize_t val):
         cdef:
             khiter_t k
@@ -494,6 +512,7 @@ cdef class StringHashTable(HashTable):
         else:
             raise KeyError(key)
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def get_indexer(self, ndarray[object] values):
         cdef:
@@ -522,6 +541,7 @@ cdef class StringHashTable(HashTable):
         free(vecs)
         return labels
 
+    @cython.wraparound(False)
     @cython.boundscheck(False)
     def unique(self, ndarray[object] values):
         cdef:
@@ -558,6 +578,8 @@ cdef class StringHashTable(HashTable):
             uniques.append(values[uindexer[i]])
         return uniques.to_array()
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def factorize(self, ndarray[object] values):
         uniques = ObjectVector()
         labels = self.get_labels(values, uniques, 0, 0)
@@ -708,6 +730,8 @@ cdef class PyObjectHashTable(HashTable):
         kh_destroy_pymap(self.table)
         self.table = NULL
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef get_item(self, object val):
         cdef khiter_t k
         if val != val or val is None:
@@ -718,6 +742,8 @@ cdef class PyObjectHashTable(HashTable):
         else:
             raise KeyError(val)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def get_iter_test(self, object key, Py_ssize_t iterations):
         cdef Py_ssize_t i, val
         if key != key or key is None:
@@ -727,6 +753,8 @@ cdef class PyObjectHashTable(HashTable):
             if k != self.table.n_buckets:
                 val = self.table.vals[k]
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     cpdef set_item(self, object key, Py_ssize_t val):
         cdef:
             khiter_t k
@@ -743,6 +771,8 @@ cdef class PyObjectHashTable(HashTable):
         else:
             raise KeyError(key)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def map_locations(self, ndarray[object] values):
         cdef:
             Py_ssize_t i, n = len(values)
@@ -759,6 +789,8 @@ cdef class PyObjectHashTable(HashTable):
             k = kh_put_pymap(self.table, <PyObject*>val, &ret)
             self.table.vals[k] = i
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def lookup(self, ndarray[object] values):
         cdef:
             Py_ssize_t i, n = len(values)
@@ -781,6 +813,8 @@ cdef class PyObjectHashTable(HashTable):
 
         return np.asarray(locs)
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def unique(self, ndarray[object] values):
         cdef:
             Py_ssize_t i, n = len(values)
@@ -804,6 +838,8 @@ cdef class PyObjectHashTable(HashTable):
 
         return uniques.to_array()
 
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     def get_labels(self, ndarray[object] values, ObjectVector uniques,
                    Py_ssize_t count_prior, int64_t na_sentinel,
                    bint check_null=True):
