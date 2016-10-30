@@ -403,6 +403,19 @@ class TestDatetimeIndex(DatetimeLike, tm.TestCase):
                           dtype=object)
         tm.assert_series_equal(result, expected)
 
+    def test_astype_with_tz_roundtrip(self):
+        idx = pd.date_range('2016-03-13', freq='H', periods=5,
+                            tz='US/Eastern')
+        res = idx.astype('datetime64[ns]')
+        exp = pd.date_range('2016-03-13 05:00:00', freq='H', periods=5)
+        tm.assert_index_equal(res, exp)
+
+        idx = pd.date_range('2016-11-06', freq='H', periods=5,
+                            tz='US/Eastern')
+        res = idx.astype('datetime64[ns]')
+        exp = pd.date_range('2016-11-06 04:00:00', freq='H', periods=5)
+        tm.assert_index_equal(res, exp)
+
     def test_astype_str_compat(self):
         # GH 13149, GH 13209
         # verify that we are returing NaT as a string (and not unicode)

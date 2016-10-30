@@ -97,6 +97,14 @@ def create_data():
                   dt=Series(date_range('20130101', periods=5)),
                   dt_tz=Series(date_range('20130101', periods=5,
                                           tz='US/Eastern')),
+                  dt_dst1=Series(date_range('2016-11-06', freq='H', periods=5,
+                                            tz='US/Eastern'),
+                                 index=date_range('2016-03-13', freq='H',
+                                                  periods=5, tz='US/Eastern')),
+                  dt_dst2=Series(date_range('2016-03-13', freq='H', periods=5,
+                                            tz='US/Eastern'),
+                                 index=date_range('2016-11-06', freq='H',
+                                                  periods=5, tz='US/Eastern')),
                   period=Series([Period('2000Q1')] * 5))
 
     mixed_dup_df = DataFrame(data)

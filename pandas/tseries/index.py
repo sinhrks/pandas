@@ -145,13 +145,9 @@ def _new_DatetimeIndex(cls, d):
     """ This is called upon unpickling, rather than the default which doesn't
     have arguments and breaks __new__ """
 
-    # data are already in UTC
-    # so need to localize
-    tz = d.pop('tz', None)
-
-    result = cls.__new__(cls, verify_integrity=False, **d)
-    if tz is not None:
-        result = result.tz_localize('UTC').tz_convert(tz)
+    # data are already in UTC so need to localize
+    values = d.pop('data')
+    result = cls._simple_new(values, **d)
     return result
 
 
@@ -839,7 +835,7 @@ class DatetimeIndex(DatelikeOps, TimelikeOps, DatetimeIndexOpsMixin,
                          dtype='i8')
         elif is_datetime64_ns_dtype(dtype):
             if self.tz is not None:
-                return self.tz_convert('UTC').tz_localize(None)
+                return self.tz_convert(None)
             elif copy is True:
                 return self.copy()
             return self
