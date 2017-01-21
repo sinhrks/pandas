@@ -18,6 +18,7 @@ from pandas.types.common import (_TD_DTYPE, _NS_DTYPE,
                                  is_datetime64_dtype, is_datetimetz, is_sparse,
                                  is_categorical, is_categorical_dtype,
                                  is_integer_dtype,
+                                 is_unsigned_integer_dtype,
                                  is_datetime64tz_dtype,
                                  is_object_dtype,
                                  is_datetimelike_v_numeric,
@@ -1665,6 +1666,15 @@ class IntBlock(NumericBlock):
         return is_integer_dtype(value) and value.dtype == self.dtype
 
 
+class UIntBlock(IntBlock):
+
+    def _can_hold_element(self, element):
+        super(UIntBlock, self)._can_hold_element(element) and element >= 0
+
+    def should_store(self, element):
+        super(UIntBlock, self).should_store(element) and element >= 0
+
+
 class DatetimeLikeBlockMixin(object):
 
     @property
@@ -2682,7 +2692,11 @@ def make_block(values, placement, klass=None, ndim=None, dtype=None,
             klass = TimeDeltaBlock
         elif (issubclass(vtype, np.integer) and
               not issubclass(vtype, np.datetime64)):
-            klass = IntBlock
+
+            if is_unsigned_integer_dtype(vtype):
+                klass = UIntBlock
+            else:
+                klass = IntBlock
         elif dtype == np.bool_:
             klass = BoolBlock
         elif issubclass(vtype, np.datetime64):

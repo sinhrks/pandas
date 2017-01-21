@@ -12,7 +12,8 @@ from .common import (_ensure_object, is_bool, is_integer, is_float,
                      is_datetime64tz_dtype, is_datetime64_dtype,
                      is_timedelta64_dtype, is_dtype_equal,
                      is_float_dtype, is_complex_dtype,
-                     is_integer_dtype, is_datetime_or_timedelta_dtype,
+                     is_integer_dtype, is_unsigned_integer_dtype,
+                     is_datetime_or_timedelta_dtype,
                      is_bool_dtype, is_scalar,
                      _string_dtypes,
                      _coerce_to_dtype,
@@ -531,6 +532,9 @@ def _astype_nansafe(arr, dtype, copy=True):
         if not np.isfinite(arr).all():
             raise ValueError('Cannot convert non-finite values (NA or inf) to '
                              'integer')
+        if arr.min() < 0 and is_unsigned_integer_dtype(dtype):
+            raise ValueError('Cannot convert negative values to '
+                             'unsigned integer')
 
     elif arr.dtype == np.object_ and np.issubdtype(dtype.type, np.integer):
         # work around NumPy brokenness, #1987
