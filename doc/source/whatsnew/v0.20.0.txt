@@ -430,6 +430,7 @@ Bug Fixes
 
 
 - Bug in ``pd.merge_asof()`` where ``left_index``/``right_index`` together caused a failure when ``tolerance`` was specified (:issue:`15135`)
+- Bug in ``pd.concat(axis=0)`` includes ``Series`` incorrectly changes its ``.name``  (:issue:`15047`)
 
 
 

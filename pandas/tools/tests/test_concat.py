@@ -1275,18 +1275,100 @@ class TestConcatenate(ConcatenateBase):
         assert_frame_equal(result, expected)
 
         # axis 0
-        expected = DataFrame(np.tile(arr, 3).reshape(-1, 1),
-                             index=index.tolist() * 3, columns=[0])
+        expected = DataFrame({'foo': arr.tolist() + [np.nan] * 20,
+                              0: [np.nan] * 10 + arr.tolist() + [np.nan] * 10,
+                              'bar': [np.nan] * 20 + arr.tolist()},
+                             index=index.tolist() * 3,
+                             columns=['foo', 0, 'bar'])
         result = concat([s1, df, s2])
         assert_frame_equal(result, expected)
 
-        expected = DataFrame(np.tile(arr, 3).reshape(-1, 1), columns=[0])
+        expected = DataFrame({'foo': arr.tolist() + [np.nan] * 20,
+                              0: [np.nan] * 10 + arr.tolist() + [np.nan] * 10,
+                              'bar': [np.nan] * 20 + arr.tolist()},
+                             columns=['foo', 0, 'bar'])
         result = concat([s1, df, s2], ignore_index=True)
         assert_frame_equal(result, expected)
 
         # invalid concatente of mixed dims
         panel = tm.makePanel()
         self.assertRaises(ValueError, lambda: concat([panel, s1], axis=1))
+
+    def test_concat_mixed_objs_nonames(self):
+        # concat mixed series/frames
+        # GH 15047
+
+        # axis 1, None should not be filled
+        s1 = Series([10, 20, 30], index=[1, 2, 3], name='a')
+        s2 = Series([10, 20, 30], index=[1, 2, 3], name=None)
+        df = DataFrame([10, 20, 30], index=[1, 2, 3], columns=['a'])
+
+        res = pd.concat([s1, s2, df], axis=1)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3], columns=['a', 0, 'a'])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s2, s1, df], axis=1)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3], columns=[0, 'a', 'a'])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([df, s2, s1], axis=1)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3], columns=['a', 0, 'a'])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s1, s2, df], axis=1, ignore_index=True)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s2, s1, df], axis=1, ignore_index=True)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([df, s2, s1], axis=1, ignore_index=True)
+        exp = pd.DataFrame([[10, 10, 10], [20, 20, 20], [30, 30, 30]],
+                           index=[1, 2, 3])
+        tm.assert_frame_equal(res, exp)
+
+        # axis 0, None should not be filled
+        s1 = Series([10, 20, 30], index=[1, 2, 3], name='a')
+        s2 = Series([10, 20, 30], index=[1, 2, 3], name=None)
+        df = DataFrame([10, 20, 30], index=[1, 2, 3], columns=['a'])
+
+        res = pd.concat([s1, s2, df])
+        exp = pd.DataFrame({'a': [10, 20, 30, np.nan, np.nan, np.nan,
+                                  10, 20, 30],
+                            None: [np.nan, np.nan, np.nan, 10, 20, 30,
+                                   np.nan, np.nan, np.nan]},
+                           index=[1, 2, 3] * 3, columns=['a', None])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s2, s1, df])
+        exp = pd.DataFrame({None: [10, 20, 30, np.nan, np.nan, np.nan,
+                                           np.nan, np.nan, np.nan],
+                            'a': [np.nan, np.nan, np.nan, 10, 20, 30,
+                                  10, 20, 30]},
+                           index=[1, 2, 3] * 3, columns=[None, 'a'])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s1, s2, df], ignore_index=True)
+        exp = pd.DataFrame({'a': [10, 20, 30, np.nan, np.nan, np.nan,
+                                  10, 20, 30],
+                            None: [np.nan, np.nan, np.nan, 10, 20, 30,
+                                   np.nan, np.nan, np.nan]},
+                           columns=['a', None])
+        tm.assert_frame_equal(res, exp)
+
+        res = pd.concat([s2, s1, df], ignore_index=True)
+        exp = pd.DataFrame({None: [10, 20, 30, np.nan, np.nan, np.nan,
+                                           np.nan, np.nan, np.nan],
+                            'a': [np.nan, np.nan, np.nan, 10, 20, 30,
+                                  10, 20, 30]},
+                           columns=[None, 'a'])
+        tm.assert_frame_equal(res, exp)
 
     def test_empty_dtype_coerce(self):
 

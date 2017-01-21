@@ -1731,14 +1731,10 @@ class _Concatenator(object):
 
                 else:
                     name = getattr(obj, 'name', None)
-                    if ignore_index or name is None:
+                    # axis is flipped if self._frame is True
+                    if axis == 0 and name is None:
                         name = current_column
                         current_column += 1
-
-                    # doing a row-wise concatenation so need everything
-                    # to line up
-                    if self._is_frame and axis == 1:
-                        name = 0
                     obj = sample._constructor({name: obj})
 
                 self.objs.append(obj)
