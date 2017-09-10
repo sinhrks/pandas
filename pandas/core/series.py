@@ -166,12 +166,12 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
             if index is not None:
                 index = _ensure_index(index)
 
-            if data is None:
-                data = {}
             if dtype is not None:
                 dtype = self._validate_dtype(dtype)
 
-            if isinstance(data, MultiIndex):
+            if data is None and index is None:
+                data = np.array([], dtype=object)
+            elif isinstance(data, MultiIndex):
                 raise NotImplementedError("initializing a Series from a "
                                           "MultiIndex is not supported")
             elif isinstance(data, Index):
@@ -2988,7 +2988,6 @@ def _sanitize_array(data, index, dtype=None, copy=False,
             data = data.copy()
 
     def _try_cast(arr, take_fast_path):
-
         # perf shortcut as this is the most common case
         if take_fast_path:
             if maybe_castable(arr) and not copy and dtype is None:
@@ -3040,7 +3039,7 @@ def _sanitize_array(data, index, dtype=None, copy=False,
             subarr = data.copy()
         return subarr
 
-    elif isinstance(data, (list, tuple)) and len(data) > 0:
+    elif isinstance(data, (list, tuple)) and data is not None:
         if dtype is not None:
             try:
                 subarr = _try_cast(data, False)
