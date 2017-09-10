@@ -1463,7 +1463,7 @@ class TestSeriesOperators(TestData):
         empty = Series([], index=Index([]))
 
         result = series + empty
-        assert np.isnan(result).all()
+        assert result.isnull().all()
 
         result = empty + Series([], index=Index([]))
         assert len(result) == 0

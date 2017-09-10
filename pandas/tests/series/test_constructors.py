@@ -87,6 +87,10 @@ class TestSeriesConstructors(TestData):
         assert_series_equal(empty, empty2, check_index_type=False)
 
         empty = Series(index=lrange(10))
+        empty2 = Series(np.nan, index=lrange(10), dtype=object)
+        assert_series_equal(empty, empty2)
+
+        empty = Series(index=lrange(10), dtype=float)
         empty2 = Series(np.nan, index=lrange(10))
         assert_series_equal(empty, empty2)
 
@@ -270,10 +274,13 @@ class TestSeriesConstructors(TestData):
 
     def test_constructor_pass_none(self):
         s = Series(None, index=lrange(5))
-        assert s.dtype == np.float64
+        assert s.dtype == np.object_
 
         s = Series(None, index=lrange(5), dtype=object)
         assert s.dtype == np.object_
+
+        s = Series(None, index=lrange(5), dtype=np.float64)
+        assert s.dtype == np.float64
 
         # GH 7431
         # inference on the index

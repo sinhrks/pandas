@@ -169,8 +169,12 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
             if dtype is not None:
                 dtype = self._validate_dtype(dtype)
 
-            if data is None and index is None:
-                data = np.array([], dtype=object)
+            if data is None and dtype is None:
+                if index is None:
+                    data = np.array([], dtype=object)
+                else:
+                    data = np.empty(len(index), dtype=object)
+                    data.fill(np.nan)
             elif isinstance(data, MultiIndex):
                 raise NotImplementedError("initializing a Series from a "
                                           "MultiIndex is not supported")
@@ -1735,6 +1739,9 @@ class Series(base.IndexOpsMixin, generic.NDFrame):
         -------
         y : Series
         """
+        if len(other) == 0:
+            return self.copy()
+
         new_index = self.index.union(other.index)
         this = self.reindex(new_index, copy=False)
         other = other.reindex(new_index, copy=False)

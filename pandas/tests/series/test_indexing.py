@@ -109,24 +109,24 @@ class TestSeriesIndexing(TestData):
         # only 1 left, del, add, del
         s = Series(1)
         del s[0]
-        assert_series_equal(s, Series(dtype='int64', index=Index(
-            [], dtype='int64')))
+        exp = Series(dtype='int64',index=Index([], dtype='int64'))
+        assert_series_equal(s, exp)
         s[0] = 1
         assert_series_equal(s, Series(1))
         del s[0]
-        assert_series_equal(s, Series(dtype='int64', index=Index(
-            [], dtype='int64')))
+        exp = Series(dtype='int64', index=Index([], dtype='int64'))
+        assert_series_equal(s, exp)
 
         # Index(dtype=object)
         s = Series(1, index=['a'])
         del s['a']
-        assert_series_equal(s, Series(dtype='int64', index=Index(
-            [], dtype='object')))
+        exp = Series(dtype='int64', index=Index([], dtype='object'))
+        assert_series_equal(s, exp)
         s['a'] = 1
         assert_series_equal(s, Series(1, index=['a']))
         del s['a']
-        assert_series_equal(s, Series(dtype='int64', index=Index(
-            [], dtype='object')))
+        exp = Series(dtype='int64', index=Index([], dtype='object'))
+        assert_series_equal(s, exp)
 
     def test_getitem_setitem_ellipsis(self):
         s = Series(np.random.randn(10))

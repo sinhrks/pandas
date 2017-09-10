@@ -454,6 +454,8 @@ class TestSeriesMissingData(TestData):
         result = s1.fillna({})
         assert_series_equal(result, s1)
         result = s1.fillna(Series(()))
+        assert_series_equal(result, s1.astype(object))
+        result = s1.fillna(Series((), dtype=float))
         assert_series_equal(result, s1)
         result = s2.fillna(s1)
         assert_series_equal(result, s2)
