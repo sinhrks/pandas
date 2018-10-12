@@ -35,10 +35,8 @@ class NumericIndex(Index):
     _is_numeric_dtype = True
 
     def __new__(cls, data=None, dtype=None, copy=False, name=None,
-                fastpath=False):
-
-        if fastpath:
-            return cls._simple_new(data, name=name)
+                # fastpath=False
+                ):
 
         # is_scalar, generators handled in coerce_to_ndarray
         data = cls._coerce_to_ndarray(data)
@@ -55,6 +53,10 @@ class NumericIndex(Index):
         if name is None and hasattr(data, 'name'):
             name = data.name
         return cls._simple_new(subarr, name=name)
+
+    @classmethod
+    def _from_fastpath(cls, data=None, name=None):
+        return cls._simple_new(data, name=name)
 
     @Appender(_index_shared_docs['_maybe_cast_slice_bound'])
     def _maybe_cast_slice_bound(self, label, side, kind):

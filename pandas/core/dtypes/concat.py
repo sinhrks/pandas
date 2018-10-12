@@ -414,9 +414,10 @@ def union_categoricals(to_union, sort_categories=False, ignore_order=False):
 
     if ignore_order:
         ordered = False
-
+    # TODO: fastpath?
     return Categorical(new_codes, categories=categories, ordered=ordered,
-                       fastpath=True)
+                       # fastpath=True
+                       )
 
 
 def _concatenate_2d(to_concat, axis):

@@ -324,7 +324,8 @@ class Categorical(ExtensionArray, PandasObject):
     _typ = 'categorical'
 
     def __init__(self, values, categories=None, ordered=None, dtype=None,
-                 fastpath=False):
+                 # fastpath=False
+                 ):
 
         # Ways of specifying the dtype (prioritized ordered)
         # 1. dtype is a CategoricalDtype
@@ -366,11 +367,6 @@ class Categorical(ExtensionArray, PandasObject):
 
         # At this point, dtype is always a CategoricalDtype
         # if dtype.categories is None, we are inferring
-
-        if fastpath:
-            self._codes = coerce_indexer_dtype(values, categories)
-            self._dtype = self._dtype.update_dtype(dtype)
-            return
 
         # null_mask indicates missing values we want to exclude from inference.
         # This means: only missing values in list-likes (not arrays/ndframes).
@@ -436,6 +432,17 @@ class Categorical(ExtensionArray, PandasObject):
         self._dtype = self._dtype.update_dtype(dtype)
         self._codes = coerce_indexer_dtype(codes, dtype.categories)
 
+    @classmethod
+    def _from_fastpath(cls, values, ordered=None, dtype=None):
+        # dtype must be a CategoricalDtype
+        # if dtype.categories is None, we are inferring
+        assert is_categorical_dtype(dtype), dtype
+
+        obj = super().__new__(cls)
+        obj._codes = coerce_indexer_dtype(values, dtype.categories)
+        obj._dtype = obj._dtype.update_dtype(dtype)
+        return obj
+
     @property
     def categories(self):
         """The categories of this categorical.
@@ -499,9 +506,8 @@ class Categorical(ExtensionArray, PandasObject):
 
     def copy(self):
         """ Copy constructor. """
-        return self._constructor(values=self._codes.copy(),
-                                 dtype=self.dtype,
-                                 fastpath=True)
+        return self._from_fastpath(values=self._codes.copy(),
+                                   dtype=self.dtype)
 
     def astype(self, dtype, copy=True):
         """
@@ -608,7 +614,7 @@ class Categorical(ExtensionArray, PandasObject):
             dtype = CategoricalDtype(cats, ordered=False)
             codes = inferred_codes
 
-        return cls(codes, dtype=dtype, fastpath=True)
+        return cls._from_fastpath(values=codes, dtype=dtype)
 
     @classmethod
     def from_codes(cls, codes, categories, ordered=False):
@@ -658,9 +664,10 @@ class Categorical(ExtensionArray, PandasObject):
         if len(codes) and (codes.max() >= len(categories) or codes.min() < -1):
             raise ValueError("codes need to be between -1 and "
                              "len(categories)-1")
-
+        # TODO: fastpath?
         return cls(codes, categories=categories, ordered=ordered,
-                   fastpath=True)
+                   # fastpath=True
+                   )
 
     _codes = None
 
@@ -731,7 +738,7 @@ class Categorical(ExtensionArray, PandasObject):
         """
         codes = _recode_for_categories(self.codes, self.categories,
                                        dtype.categories)
-        return type(self)(codes, dtype=dtype, fastpath=True)
+        return self._from_fastpath(codes, dtype=dtype)
 
     def set_ordered(self, value, inplace=False):
         """
@@ -1450,9 +1457,7 @@ class Categorical(ExtensionArray, PandasObject):
             count = bincount(np.where(mask, code, ncat))
             ix = np.append(ix, -1)
 
-        ix = self._constructor(ix, dtype=self.dtype,
-                               fastpath=True)
-
+        ix = self._from_fastpath(ix, dtype=self.dtype)
         return Series(count, index=CategoricalIndex(ix), dtype='int64')
 
     def get_values(self):
@@ -1630,8 +1635,7 @@ class Categorical(ExtensionArray, PandasObject):
             self._codes = codes
             return
         else:
-            return self._constructor(values=codes, dtype=self.dtype,
-                                     fastpath=True)
+            return self._from_fastpath(values=codes, dtype=self.dtype)
 
     def _values_for_rank(self):
         """
@@ -1775,7 +1779,7 @@ class Categorical(ExtensionArray, PandasObject):
                                 'or Series, but you passed a '
                                 '"{0}"'.format(type(value).__name__))
 
-        return self._constructor(codes, dtype=self.dtype, fastpath=True)
+        return self._from_fastpath(values=codes, dtype=self.dtype)
 
     def take_nd(self, indexer, allow_fill=None, fill_value=None):
         """
@@ -1820,8 +1824,7 @@ class Categorical(ExtensionArray, PandasObject):
 
         codes = take(self._codes, indexer, allow_fill=allow_fill,
                      fill_value=fill_value)
-        result = self._constructor(codes, dtype=self.dtype, fastpath=True)
-        return result
+        return self._from_fastpath(values=codes, dtype=self.dtype)
 
     take = take_nd
 
@@ -1840,7 +1843,7 @@ class Categorical(ExtensionArray, PandasObject):
             slicer = slicer[1]
 
         codes = self._codes[slicer]
-        return self._constructor(values=codes, dtype=self.dtype, fastpath=True)
+        return self._fastpath(values=codes, dtype=self.dtype)
 
     def __len__(self):
         """The length of this Categorical."""
@@ -1961,8 +1964,8 @@ class Categorical(ExtensionArray, PandasObject):
             else:
                 return self.categories[i]
         else:
-            return self._constructor(values=self._codes[key],
-                                     dtype=self.dtype, fastpath=True)
+            return self._from_fastpath(values=self._codes[key],
+                                       dtype=self.dtype)
 
     def __setitem__(self, key, value):
         """ Item assignment.
@@ -2152,7 +2155,7 @@ class Categorical(ExtensionArray, PandasObject):
             good = self._codes != -1
             codes = self._codes[good]
         codes = sorted(htable.mode_int64(ensure_int64(codes), dropna))
-        return self._constructor(values=codes, dtype=self.dtype, fastpath=True)
+        return self._from_fastpath(values=codes, dtype=self.dtype)
 
     def unique(self):
         """
@@ -2291,7 +2294,7 @@ class Categorical(ExtensionArray, PandasObject):
         """
         nv.validate_repeat(args, kwargs)
         codes = self._codes.repeat(repeats)
-        return self._constructor(values=codes, dtype=self.dtype, fastpath=True)
+        return self._from_fastpath(values=codes, dtype=self.dtype)
 
     # Implement the ExtensionArray interface
     @property

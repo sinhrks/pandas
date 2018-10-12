@@ -459,7 +459,7 @@ class DataFrame(NDFrame):
             else:
                 raise ValueError('DataFrame constructor not properly called!')
 
-        NDFrame.__init__(self, mgr, fastpath=True)
+        NDFrame.__init__(self, mgr)
 
     def _init_dict(self, data, index, columns, dtype=None):
         """
@@ -3211,7 +3211,7 @@ class DataFrame(NDFrame):
     def _box_col_values(self, values, items):
         """ provide boxed values for a column """
         klass = _get_sliced_frame_result_type(values, self)
-        return klass(values, index=self.index, name=items, fastpath=True)
+        return klass._from_fastpath(values, index=self.index, name=items)
 
     def __setitem__(self, key, value):
         key = com.apply_if_callable(key, self)

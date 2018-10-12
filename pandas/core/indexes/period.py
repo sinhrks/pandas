@@ -305,7 +305,7 @@ class PeriodIndex(PeriodArrayMixin, DatelikeOps, DatetimeIndexOpsMixin,
 
     @cache_readonly
     def _int64index(self):
-        return Int64Index(self.asi8, name=self.name, fastpath=True)
+        return Int64Index._from_fastpath(self.asi8, name=self.name)
 
     @property
     def values(self):

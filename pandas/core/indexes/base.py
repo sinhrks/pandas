@@ -252,13 +252,11 @@ class Index(IndexOpsMixin, PandasObject):
     str = CachedAccessor("str", StringMethods)
 
     def __new__(cls, data=None, dtype=None, copy=False, name=None,
-                fastpath=False, tupleize_cols=True, **kwargs):
+                # fastpath=False,
+                tupleize_cols=True, **kwargs):
 
         if name is None and hasattr(data, 'name'):
             name = data.name
-
-        if fastpath:
-            return cls._simple_new(data, name)
 
         from .range import RangeIndex
 
@@ -502,6 +500,10 @@ class Index(IndexOpsMixin, PandasObject):
         for k, v in compat.iteritems(kwargs):
             setattr(result, k, v)
         return result._reset_identity()
+
+    @classmethod
+    def _from_fastpath(cls, *args, **kwargs):
+        return cls._simple_new(*args, **kwargs)
 
     _index_shared_docs['_shallow_copy'] = """
         create a new Index with the same class as the caller, don't copy the
