@@ -190,7 +190,7 @@ def _get_fill_value(dtype, fill_value=None, fill_value_typ=None):
             else:
                 return -np.inf
     else:
-        if fill_value_typ is None:
+        if fill_value_typ is None or is_datetime_or_timedelta_dtype(dtype):
             return tslibs.iNaT
         else:
             if fill_value_typ == '+inf':
