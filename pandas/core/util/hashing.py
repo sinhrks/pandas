@@ -151,8 +151,7 @@ def hash_tuples(vals, encoding='utf8', hash_key=None):
     # create a list-of-Categoricals
     vals = [Categorical(vals.labels[level],
                         vals.levels[level],
-                        ordered=False,
-                        fastpath=True)
+                        ordered=False)
             for level in range(vals.nlevels)]
 
     # hash the list-of-ndarrays
@@ -287,7 +286,7 @@ def hash_array(vals, encoding='utf8', hash_key=None, categorize=True):
             from pandas import factorize, Categorical, Index
             codes, categories = factorize(vals, sort=False)
             cat = Categorical(codes, Index(categories),
-                              ordered=False, fastpath=True)
+                              ordered=False)
             return _hash_categorical(cat, encoding, hash_key)
 
         try:

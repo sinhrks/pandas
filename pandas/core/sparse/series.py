@@ -224,8 +224,8 @@ class SparseSeries(Series):
         warnings.warn("'from_array' is deprecated and will be removed in a "
                       "future version. Please use the pd.SparseSeries(..) "
                       "constructor instead.", FutureWarning, stacklevel=2)
-        return cls._from_fastpath(arr, index=index, name=name, copy=copy,
-                                  fill_value=fill_value)
+        return cls.(arr, index=index, name=name, copy=copy,
+                    fill_value=fill_value)
 
     @property
     def _constructor(self):
