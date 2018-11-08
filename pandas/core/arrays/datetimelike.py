@@ -408,18 +408,15 @@ class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin):
 
     def _add_nat(self):
         """Add pd.NaT to self"""
-        if is_period_dtype(self):
-            raise TypeError('Cannot add {cls} and {typ}'
-                            .format(cls=type(self).__name__,
-                                    typ=type(NaT).__name__))
-
         # GH#19124 pd.NaT is treated like a timedelta for both timedelta
         # and datetime dtypes
         result = np.zeros(len(self), dtype=np.int64)
         result.fill(iNaT)
         if is_timedelta64_dtype(self):
-            return type(self)(result, freq=None)
-        return type(self)(result, tz=self.tz, freq=None)
+            return type(self)(result, freq=None, copy=False)
+        elif is_period_dtype(self):
+            return type(self)(result, freq=self.freq, copy=False)
+        return type(self)(result, tz=self.tz, freq=None, copy=False)
 
     def _sub_nat(self):
         """Subtract pd.NaT from self"""
