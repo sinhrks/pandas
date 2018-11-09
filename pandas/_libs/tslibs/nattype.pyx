@@ -123,7 +123,8 @@ cdef class _NaT(datetime):
             return NaT
         elif getattr(other, '_typ', None) in ['dateoffset', 'series',
                                               'period', 'datetimeindex',
-                                              'timedeltaindex']:
+                                              'timedeltaindex',
+                                              'periodindex']:
             # Duplicate logic in _Timestamp.__add__ to avoid needing
             # to subclass; allows us to @final(_Timestamp.__add__)
             return NotImplemented

@@ -1415,7 +1415,6 @@ def _arith_method_SERIES(cls, op, special):
         elif is_timedelta64_dtype(right):
             # We should only get here with non-scalar or timedelta64('NaT')
             #  values for right
-            # Note: we cannot use dispatch_to_index_op because
             #  that may incorrectly raise TypeError when we
             #  should get NullFrequencyError
             result = op(pd.Index(left), right)

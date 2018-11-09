@@ -410,6 +410,7 @@ class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin):
         """Add pd.NaT to self"""
         # GH#19124 pd.NaT is treated like a timedelta for both timedelta
         # and datetime dtypes
+        print('add-nat!')
         result = np.zeros(len(self), dtype=np.int64)
         result.fill(iNaT)
         if is_timedelta64_dtype(self):
@@ -426,6 +427,7 @@ class DatetimeLikeArrayMixin(ExtensionOpsMixin, AttributesMixin):
         # For datetime64 dtypes by convention we treat NaT as a datetime, so
         # this subtraction returns a timedelta64 dtype.
         # For period dtype, timedelta64 is a close-enough return dtype.
+        print('sub-nat!')
         result = np.zeros(len(self), dtype=np.int64)
         result.fill(iNaT)
         return result.view('timedelta64[ns]')

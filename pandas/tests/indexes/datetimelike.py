@@ -101,3 +101,25 @@ class DatetimeLike(Base):
         with tm.assert_produces_warning(FutureWarning):
             i = d.asobject
         assert isinstance(i, pd.Index)
+
+    def test_nat_arithmetics(self):
+        idx = self.create_index()
+        s = pd.Series(idx)
+
+        expected = pd.TimedeltaIndex([pd.NaT] * len(idx))
+        tm.assert_index_equal(idx - pd.NaT, expected)
+        tm.assert_index_equal(pd.NaT - idx, expected)
+
+        tm.assert_series_equal(s - pd.NaT, pd.Series(expected))
+        # tm.assert_series_equal(pd.NaT - s, pd.Series(expected))
+
+        if isinstance(idx, pd.PeriodIndex):
+            expected = type(idx)([pd.NaT] * len(idx), freq=idx.freq)
+        else:
+            expected = type(idx)([pd.NaT] * len(idx))
+
+        tm.assert_index_equal(idx + pd.NaT, expected)
+        tm.assert_index_equal(pd.NaT + idx, expected)
+
+        tm.assert_series_equal(s + pd.NaT, pd.Series(expected))
+        # tm.assert_series_equal(pd.NaT + s, pd.Series(expected))
